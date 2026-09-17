@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+@theme {
+  --color-signal: #0B0E11;
+  --color-mist: #C9D1D9;
+  --color-ink: #0B0E11;
+  --color-amber: #FFB020;
+  --color-amber-dim: #FF6A1A;
+  --color-go: #3FB950;
+  --color-platform: #161B22;
+  --color-paper: #F6F8FA;
+  
+  --font-signage: 'Rajdhani', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-data: 'JetBrains Mono', monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-paper text-ink font-body antialiased;
+  }
+}
+
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--color-amber);
+  color: var(--color-ink);
+  padding: 8px;
+  z-index: 100;
+  transition: top 0.3s;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+.pulse-dot {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.livery-stripe {
+  background: linear-gradient(135deg, var(--color-amber) 0%, var(--color-amber-dim) 100%);
+  opacity: 0.1;
+}
+
+.flap-board {
+  background: var(--color-signal);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-family: var(--font-data);
+  font-size: 24px;
+  color: var(--color-amber);
+  letter-spacing: 2px;
+}
+
+.flap-lg {
+  font-size: 32px;
+  padding: 16px 24px;
+}
+
+.roundel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  font-family: var(--font-signage);
+  font-weight: 700;
+}
+
+.barcode {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--color-mist) 0px,
+    var(--color-mist) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+  height: 24px;
+  width: 100%;
+}
+
+.ticket-pass {
+  background: var(--color-paper);
+  border: 1px solid rgba(11, 14, 17, 0.1);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.ticket-stub {
+  background: var(--color-amber);
+  color: var(--color-ink);
+  padding: 8px 16px;
+  font-family: var(--font-data);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.chev {
+  transition: transform 0.2s;
+}
+
+details[open] .chev {
+  transform: rotate(180deg);
+}
+
