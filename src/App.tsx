@@ -471,22 +471,15 @@ function App() {
     const fromStop = busStops[startIndex].location
     const toStop = busStops[endIndex].location
 
-    console.log('Calculating fare:', { fromStop, toStop, startIndex, endIndex })
-
     // Check if fare exists in matrix (forward direction)
     if (fareMatrix[fromStop] && fareMatrix[fromStop][toStop]) {
-      console.log('Found fare in forward direction:', fareMatrix[fromStop][toStop])
       return fareMatrix[fromStop][toStop]
     }
 
     // Check reverse direction (if matrix is bidirectional)
     if (fareMatrix[toStop] && fareMatrix[toStop][fromStop]) {
-      console.log('Found fare in reverse direction:', fareMatrix[toStop][fromStop])
       return fareMatrix[toStop][fromStop]
     }
-
-    // Fallback: estimate fare based on distance between stops
-    console.log('Fare not found in matrix, estimating based on stop distance')
     const stopDistance = Math.abs(endIndex - startIndex)
     const estimatedFare = Math.min(15 + (stopDistance * 5), 110) // Base fare + distance factor, max 110
     const estimatedDiscounted = Math.max(estimatedFare - 10, 15) // Discounted fare
@@ -511,7 +504,6 @@ function App() {
     try {
       // Insert reservation into database
       if (!supabase) {
-        console.error('Supabase client not initialized')
         return
       }
       const { data, error } = await supabase
@@ -529,12 +521,9 @@ function App() {
         .select()
 
       if (error) {
-        console.error('Error creating reservation:', error)
         alert(`Failed to create reservation: ${error.message || 'Please try again.'}`)
         return
       }
-
-      console.log('Reservation created successfully:', data)
 
       setReservationData({
         ...reservationData,
@@ -547,7 +536,6 @@ function App() {
       // Show success notification
       alert(`Reservation successful! Your reservation ID is ${reservationId}. Please claim your card within 7 days (by ${expirationDate.toLocaleDateString()}).`)
     } catch (error) {
-      console.error('Error:', error)
       alert(`An error occurred: ${error instanceof Error ? error.message : 'Please try again.'}`)
     }
   }
@@ -612,7 +600,6 @@ function App() {
         setRouteCoordinates(coordinates)
       }
     } catch (error) {
-      console.error('Error fetching route:', error)
       // Fallback to straight line if routing fails
       if (busStops.length > 0) {
         setRouteCoordinates([
@@ -630,7 +617,6 @@ function App() {
     const fetchBusGPS = async () => {
       try {
         if (!supabase) {
-          console.error('Supabase client not initialized')
           setGpsStatus('error')
           return
         }
@@ -669,9 +655,7 @@ function App() {
           }
         }
 
-        if (logsError && !gpsData) {
-          console.error('Error fetching GPS data from gps_logs:', logsError)
-        }
+
 
         if (gpsData) {
           const lat = parseFloat((gpsData as any).lat)
@@ -764,7 +748,6 @@ function App() {
           setEstimatedArrival('Schedule check')
         }
       } catch (error) {
-        console.error('Error fetching bus GPS:', error)
         setGpsStatus('error')
         setBusLocationName('Schedule coming soon')
         setEstimatedArrival('Schedule check')
@@ -813,7 +796,6 @@ function App() {
     const fetchOccupancyData = async () => {
       try {
         if (!supabase) {
-          console.error('Supabase client not initialized')
           return
         }
         // Fetch the latest passenger count
@@ -825,7 +807,6 @@ function App() {
           .maybeSingle()
 
         if (countError) {
-          console.error('Error fetching passenger count:', countError)
           return
         }
 
@@ -843,7 +824,6 @@ function App() {
               .single()
 
             if (tripError) {
-              console.error('Error fetching trip data:', tripError)
               return
             }
 
@@ -856,7 +836,6 @@ function App() {
                 .single()
 
               if (busError) {
-                console.error('Error fetching bus data:', busError)
                 return
               }
 
@@ -875,7 +854,7 @@ function App() {
           }
         }
       } catch (error) {
-        console.error('Error fetching occupancy data:', error)
+        // Silently handle occupancy data errors
       }
     }
 
