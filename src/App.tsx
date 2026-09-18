@@ -176,6 +176,10 @@ function App() {
   // Modal state
   const [showPrivacyModal, setShowPrivacyModal] = useState(false)
   const [showPolicyModal, setShowPolicyModal] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [successModalData, setSuccessModalData] = useState<{ reservationId: string; expirationDate: string } | null>(null)
+  const [lastReservationTime, setLastReservationTime] = useState<number | null>(null)
+  const [cooldownRemaining, setCooldownRemaining] = useState<number>(0)
   const [busStops, setBusStops] = useState<Array<{ stop: string; location: string; status: string; coordinates: [number, number] }>>(busStopsData)
   const [loadingStops, setLoadingStops] = useState(true)
   const [busCoordinates, setBusCoordinates] = useState<[number, number] | null>(null)
@@ -494,6 +498,12 @@ function App() {
   const handleReservationSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // Check cooldown
+    if (lastReservationTime && Date.now() - lastReservationTime < 60000) {
+      alert(`Please wait ${Math.ceil((60000 - (Date.now() - lastReservationTime)) / 1000)} seconds before making another reservation.`)
+      return
+    }
+
     // Generate unique reservation ID
     const reservationId = `RES-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
 
@@ -533,8 +543,15 @@ function App() {
       setShowReceipt(true)
       setShowReservationForm(false)
       
-      // Show success notification
-      alert(`Reservation successful! Your reservation ID is ${reservationId}. Please claim your card within 7 days (by ${expirationDate.toLocaleDateString()}).`)
+      // Show success modal
+      setSuccessModalData({
+        reservationId,
+        expirationDate: expirationDate.toLocaleDateString()
+      })
+      setShowSuccessModal(true)
+      
+      // Set cooldown timer
+      setLastReservationTime(Date.now())
     } catch (error) {
       alert(`An error occurred: ${error instanceof Error ? error.message : 'Please try again.'}`)
     }
@@ -550,7 +567,7 @@ function App() {
       reservationId: ''
     })
     setShowReceipt(false)
-    setShowReservationForm(false)
+    setShowReservationForm(true)
   }
 
   useEffect(() => {
@@ -579,6 +596,24 @@ function App() {
       fetchRoute()
     }
   }, [busStops])
+
+  // Cooldown timer for reservations
+  useEffect(() => {
+    if (lastReservationTime) {
+      const interval = setInterval(() => {
+        const elapsed = Date.now() - lastReservationTime
+        const remaining = Math.max(0, 60000 - elapsed)
+        setCooldownRemaining(Math.ceil(remaining / 1000))
+        
+        if (remaining <= 0) {
+          setLastReservationTime(null)
+          setCooldownRemaining(0)
+        }
+      }, 1000)
+      
+      return () => clearInterval(interval)
+    }
+  }, [lastReservationTime])
 
   const fetchRoute = async () => {
     if (busStops.length === 0) return
@@ -886,6 +921,7 @@ function App() {
 
 
   return (
+    <>
     <div className="min-h-screen bg-platform text-mist">
       <a href="#main" className="skip-link">Skip to main content</a>
 
@@ -1304,10 +1340,24 @@ function App() {
                 <div className="mt-6 pt-6 border-t border-white/10">
                   <p className="text-sm text-mist/70 mb-4">Want to skip the line? Pre-reserve your card online and pick it up at your preferred terminal.</p>
                   <button
-                    onClick={() => setShowReservationForm(true)}
-                    className="w-full px-6 py-3 bg-amber text-mist font-semibold rounded-lg hover:bg-amber/90 transition-colors"
+                    onClick={() => {
+                      if (cooldownRemaining > 0) {
+                        alert(`Please wait ${cooldownRemaining} seconds before making another reservation.`)
+                      } else {
+                        setShowReservationForm(true)
+                      }
+                    }}
+                    disabled={cooldownRemaining > 0}
+                    className={`w-full px-6 py-3 font-semibold rounded-lg transition-colors ${
+                      cooldownRemaining > 0 
+                        ? 'bg-white/10 text-mist/50 cursor-not-allowed' 
+                        : 'bg-amber text-mist hover:bg-amber/90'
+                    }`}
                   >
-                    Reserve Your Card Online
+                    {cooldownRemaining > 0 
+                      ? `Wait ${cooldownRemaining}s before next reservation` 
+                      : 'Reserve Your Card Online'
+                    }
                   </button>
                 </div>
               </div>
@@ -1436,10 +1486,15 @@ function App() {
                           <input
                             type="tel"
                             required
+                            maxLength={11}
+                            pattern="^09\d{9}$"
                             value={reservationData.contact}
-                            onChange={(e) => setReservationData({ ...reservationData, contact: e.target.value })}
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/\D/g, '')
+                              setReservationData({ ...reservationData, contact: value })
+                            }}
                             className="w-full px-4 py-2 border border-white/20 bg-black/40 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber text-mist"
-                            placeholder="09XX-XXX-XXXX"
+                            placeholder="09XXXXXXXXX"
                           />
                         </div>
 
@@ -1494,7 +1549,7 @@ function App() {
                         </div>
                       </form>
                     ) : (
-                      <div className="bg-amber/10 border border-amber/30 rounded-lg p-6">
+                      <div id="receipt-content" className="bg-amber/10 border border-amber/30 rounded-lg p-6">
                         <div className="text-center mb-6">
                           <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-amber flex items-center justify-center">
                             <svg className="w-8 h-8 text-mist" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1551,10 +1606,24 @@ function App() {
 
                         <div className="flex gap-3">
                           <button
-                            onClick={resetReservation}
-                            className="flex-1 px-6 py-3 bg-amber text-mist font-semibold rounded-lg hover:bg-amber/90 transition-colors"
+                            onClick={() => {
+                              if (cooldownRemaining > 0) {
+                                alert(`Please wait ${cooldownRemaining} seconds before making another reservation.`)
+                              } else {
+                                resetReservation()
+                              }
+                            }}
+                            disabled={cooldownRemaining > 0}
+                            className={`flex-1 px-6 py-3 font-semibold rounded-lg transition-colors ${
+                              cooldownRemaining > 0 
+                                ? 'bg-white/10 text-mist/50 cursor-not-allowed' 
+                                : 'bg-amber text-mist hover:bg-amber/90'
+                            }`}
                           >
-                            Make Another Reservation
+                            {cooldownRemaining > 0 
+                              ? `Wait ${cooldownRemaining}s` 
+                              : 'Make Another Reservation'
+                            }
                           </button>
                           <button
                             onClick={() => window.print()}
@@ -1908,6 +1977,55 @@ function App() {
             </div>
           </div>
         )}
+
+        {/* Success Modal */}
+        {showSuccessModal && successModalData && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-signal rounded-xl max-w-md w-full border border-white/10">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                      <Ticket className="w-5 h-5 text-green-500" />
+                    </div>
+                    <h3 className="font-signage font-700 text-xl">Reservation Successful!</h3>
+                  </div>
+                  <button
+                    onClick={() => setShowSuccessModal(false)}
+                    className="text-mist/50 hover:text-mist transition-colors"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="space-y-4 text-sm text-mist/70">
+                  <div className="bg-white/5 rounded-lg p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-mist/60">Reservation ID:</span>
+                      <span className="font-mono font-semibold text-mist">{successModalData.reservationId}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-mist/60">Claim by:</span>
+                      <span className="font-semibold text-mist">{successModalData.expirationDate}</span>
+                    </div>
+                  </div>
+                  <p className="leading-relaxed">
+                    Please claim your card within 7 days from your selected pickup terminal. Bring a valid ID for verification.
+                  </p>
+                </div>
+
+                <div className="mt-6 flex justify-end">
+                  <button
+                    onClick={() => setShowSuccessModal(false)}
+                    className="px-6 py-2 bg-green-500 text-mist font-semibold rounded-lg hover:bg-green-500/90 transition-colors"
+                  >
+                    Got it
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Footer */}
@@ -1936,6 +2054,42 @@ function App() {
         </div>
       </footer>
     </div>
+
+    {/* Print Styles */}
+    <style>{`
+      @media print {
+        body * {
+          visibility: hidden;
+        }
+        #receipt-content, #receipt-content * {
+          visibility: visible;
+        }
+        #receipt-content {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+          margin: 0;
+          padding: 20px;
+          background: white;
+          color: black;
+        }
+        .bg-amber\\/10, .bg-signal, .bg-black\\/40 {
+          background: white !important;
+          color: black !important;
+        }
+        .text-amber, .text-mist {
+          color: black !important;
+        }
+        .border-amber\\/30, .border-white\\/10 {
+          border: 1px solid #ccc !important;
+        }
+        button {
+          display: none !important;
+        }
+      }
+    `}</style>
+    </>
   )
 }
 
