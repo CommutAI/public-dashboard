@@ -16,6 +16,12 @@
     "react-leaflet": "^5.0.0",
     "leaflet": "^1.9.4"
   },
+  "overrides": {
+    "react-leaflet": {
+      "react": "^19.2.7",
+      "react-dom": "^19.2.7"
+    }
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tailwindcss/postcss": "^4.3.2",
