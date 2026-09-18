@@ -1,9 +1,33 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { Menu, Clock, X, Map, CreditCard, Ticket, Shield, Mail, Phone, MapPin, Lock, FileText, LogIn } from 'lucide-react'
-import { supabase } from '@commutai/supabase'
+import { createClient } from '@supabase/supabase-js'
 import 'leaflet/dist/leaflet.css'
+
+// Singleton pattern for Supabase client
+let supabaseInstance: ReturnType<typeof createClient> | null = null
+
+const getSupabaseClient = () => {
+  if (!supabaseInstance) {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+    if (supabaseUrl && supabaseKey) {
+      supabaseInstance = createClient(supabaseUrl, supabaseKey, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+        },
+        realtime: {
+          params: {
+            eventsPerSecond: 10
+          }
+        }
+      })
+    }
+  }
+  return supabaseInstance
+}
 
 // Fix for default marker icons in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -128,6 +152,7 @@ const MapRouteFitter = ({ coordinates, busStops }: { coordinates: [number, numbe
 }
 
 function App() {
+  const supabase = useMemo(() => getSupabaseClient(), [])
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [currentTime, setCurrentTime] = useState('')
   const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([])
@@ -485,6 +510,10 @@ function App() {
 
     try {
       // Insert reservation into database
+      if (!supabase) {
+        console.error('Supabase client not initialized')
+        return
+      }
       const { data, error } = await supabase
         .from('card_reservations')
         .insert({
@@ -600,6 +629,11 @@ function App() {
   useEffect(() => {
     const fetchBusGPS = async () => {
       try {
+        if (!supabase) {
+          console.error('Supabase client not initialized')
+          setGpsStatus('error')
+          return
+        }
         setGpsStatus('connecting')
         setEstimatedArrival('Connecting...')
         
@@ -741,26 +775,35 @@ function App() {
     fetchBusGPS()
 
     // Set up real-time subscription for GPS updates from both tables
-    const gpsLogsSubscription = supabase
-      .channel('public-dashboard-gps-logs-channel')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gps_logs' }, () => {
-        fetchBusGPS()
-      })
-      .subscribe()
+    let gpsLogsSubscription: any = null
+    let tripsSubscription: any = null
 
-    const tripsSubscription = supabase
-      .channel('public-dashboard-trips-channel')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'trips' }, () => {
-        fetchBusGPS()
-      })
-      .subscribe()
+    if (supabase) {
+      gpsLogsSubscription = supabase
+        .channel('public-dashboard-gps-logs-channel')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gps_logs' }, () => {
+          fetchBusGPS()
+        })
+        .subscribe()
+
+      tripsSubscription = supabase
+        .channel('public-dashboard-trips-channel')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'trips' }, () => {
+          fetchBusGPS()
+        })
+        .subscribe()
+    }
 
     // Poll for updates every 10 seconds as fallback
     const pollingInterval = setInterval(fetchBusGPS, 10000)
 
     return () => {
-      gpsLogsSubscription.unsubscribe()
-      tripsSubscription.unsubscribe()
+      if (gpsLogsSubscription) {
+        gpsLogsSubscription.unsubscribe()
+      }
+      if (tripsSubscription) {
+        tripsSubscription.unsubscribe()
+      }
       clearInterval(pollingInterval)
     }
   }, [busStops])
@@ -769,6 +812,10 @@ function App() {
   useEffect(() => {
     const fetchOccupancyData = async () => {
       try {
+        if (!supabase) {
+          console.error('Supabase client not initialized')
+          return
+        }
         // Fetch the latest passenger count
         const { data: passengerCountData, error: countError } = await supabase
           .from('passenger_counts')
@@ -836,18 +883,23 @@ function App() {
     fetchOccupancyData()
 
     // Set up real-time subscription for passenger count updates
-    const occupancySubscription = supabase
-      .channel('public-dashboard-occupancy-channel')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'passenger_counts' }, () => {
-        fetchOccupancyData()
-      })
-      .subscribe()
+    let occupancySubscription: any = null
+    if (supabase) {
+      occupancySubscription = supabase
+        .channel('public-dashboard-occupancy-channel')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'passenger_counts' }, () => {
+          fetchOccupancyData()
+        })
+        .subscribe()
+    }
 
     // Poll for updates every 30 seconds as fallback
     const pollingInterval = setInterval(fetchOccupancyData, 30000)
 
     return () => {
-      occupancySubscription.unsubscribe()
+      if (occupancySubscription) {
+        occupancySubscription.unsubscribe()
+      }
       clearInterval(pollingInterval)
     }
   }, [])
@@ -879,15 +931,6 @@ function App() {
                 <Clock size={14} />
                 {currentTime}
               </div>
-              <a 
-                href="http://localhost:3012/login"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded transition-colors"
-              >
-                <LogIn size={16} />
-                Staff Login
-              </a>
               <button 
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="md:hidden p-2 rounded hover:bg-white/10" 
@@ -906,16 +949,6 @@ function App() {
               <a href="#routes" className="hover:text-amber" onClick={() => setMobileMenuOpen(false)}>Routes</a>
               <a href="#qr-guide" className="hover:text-amber" onClick={() => setMobileMenuOpen(false)}>QR Card</a>
               <a href="#about" className="hover:text-amber" onClick={() => setMobileMenuOpen(false)}>About</a>
-              <a 
-                href="http://localhost:3012/login"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded transition-colors"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                <LogIn size={16} />
-                Staff Login
-              </a>
             </nav>
           )}
         </div>
