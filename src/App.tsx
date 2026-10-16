@@ -1010,34 +1010,11 @@ function App() {
                       
                       {/* Bus GPS marker */}
                       {busCoordinates && (
-                        <Marker 
+                        <Marker
                           position={busCoordinates}
                           icon={createBusIcon(busLocationName)}
                         />
                       )}
-                      
-                      {/* All bus stops markers (including terminals) */}
-                      {busStops.map((stop, index) => (
-                        <Marker
-                          key={index}
-                          position={stop.coordinates}
-                          icon={
-                            stop.status === 'START' ? manoloFortichIcon :
-                            stop.status === 'END' ? agoraIcon :
-                            nearbyStopIndex === index ? nearIcon :
-                            activeIcon
-                          }
-                        >
-                          <Popup>
-                            <div>
-                              <b>{stop.stop}</b><br />
-                              <span className="text-xs">{stop.location}</span>
-                              {stop.status === 'START' && <span className="text-xs text-green-400"> · Route Start</span>}
-                              {stop.status === 'END' && <span className="text-xs text-red-400"> · Route End</span>}
-                            </div>
-                          </Popup>
-                        </Marker>
-                      ))}
 
                       {/* Only show route line if we have OSRM data */}
                       {routeCoordinates.length > 0 && (
