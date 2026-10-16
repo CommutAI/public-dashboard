@@ -1016,6 +1016,26 @@ function App() {
                         />
                       )}
 
+                      {/* Terminal markers only (Manolo Fortich and Agora) */}
+                      {busStops.map((stop, index) => (
+                        stop.status === 'START' || stop.status === 'END' ? (
+                          <Marker
+                            key={index}
+                            position={stop.coordinates}
+                            icon={stop.status === 'START' ? manoloFortichIcon : agoraIcon}
+                          >
+                            <Popup>
+                              <div>
+                                <b>{stop.stop}</b><br />
+                                <span className="text-xs">{stop.location}</span>
+                                {stop.status === 'START' && <span className="text-xs text-green-400"> · Route Start</span>}
+                                {stop.status === 'END' && <span className="text-xs text-red-400"> · Route End</span>}
+                              </div>
+                            </Popup>
+                          </Marker>
+                        ) : null
+                      ))}
+
                       {/* Only show route line if we have OSRM data */}
                       {routeCoordinates.length > 0 && (
                         <Polyline 
