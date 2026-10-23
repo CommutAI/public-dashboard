@@ -166,7 +166,8 @@ function App() {
     contact: '',
     cardType: '',
     terminal: '',
-    reservationId: ''
+    reservationId: '',
+    idFile: null as File | null
   })
   const [showReceipt, setShowReceipt] = useState(false)
 
@@ -504,6 +505,12 @@ function App() {
       return
     }
 
+    // Validate ID file for discounted card types
+    if ((reservationData.cardType === 'Student' || reservationData.cardType === 'PWD' || reservationData.cardType === 'Senior Citizen') && !reservationData.idFile) {
+      alert('Please upload a valid ID for this card type.')
+      return
+    }
+
     // Generate unique reservation ID
     const reservationId = `RES-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
 
@@ -512,6 +519,17 @@ function App() {
     expirationDate.setDate(expirationDate.getDate() + 7)
 
     try {
+      // Convert file to base64 if provided
+      let idFileBase64: string | null = null
+      if (reservationData.idFile) {
+        idFileBase64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.readAsDataURL(reservationData.idFile)
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = error => reject(error)
+        })
+      }
+
       // Insert reservation into database
       if (!supabase) {
         return
@@ -524,6 +542,7 @@ function App() {
           contact: reservationData.contact,
           card_type: reservationData.cardType,
           pickup_terminal: reservationData.terminal,
+          id_file: idFileBase64,
           status: 'pending',
           created_at: new Date().toISOString(),
           expires_at: expirationDate.toISOString()
@@ -542,14 +561,14 @@ function App() {
 
       setShowReceipt(true)
       setShowReservationForm(false)
-      
+
       // Show success modal
       setSuccessModalData({
         reservationId,
         expirationDate: expirationDate.toLocaleDateString()
       })
       setShowSuccessModal(true)
-      
+
       // Set cooldown timer
       setLastReservationTime(Date.now())
     } catch (error) {
@@ -564,7 +583,8 @@ function App() {
       contact: '',
       cardType: '',
       terminal: '',
-      reservationId: ''
+      reservationId: '',
+      idFile: null
     })
     setShowReceipt(false)
     setShowReservationForm(true)
@@ -1510,6 +1530,29 @@ function App() {
                             <option value="PWD">PWD</option>
                           </select>
                         </div>
+
+                        {/* ID Upload for Student, PWD, and Senior Citizen */}
+                        {(reservationData.cardType === 'Student' || reservationData.cardType === 'PWD' || reservationData.cardType === 'Senior Citizen') && (
+                          <div>
+                            <label className="block text-sm font-medium text-mist/70 mb-2">
+                              Upload Valid ID <span className="text-mist/50">(Required for {reservationData.cardType} card)</span>
+                            </label>
+                            <input
+                              type="file"
+                              required
+                              accept="image/*,.pdf"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0] || null
+                                setReservationData({ ...reservationData, idFile: file })
+                              }}
+                              className="w-full px-4 py-2 border border-white/20 bg-black/40 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber text-mist file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-amber file:text-mist hover:file:bg-amber/90"
+                            />
+                            <p className="text-xs text-mist/50 mt-1">Accepted formats: JPG, PNG, PDF (Max 5MB)</p>
+                            {reservationData.idFile && (
+                              <p className="text-xs text-green-400 mt-1">Selected: {reservationData.idFile.name}</p>
+                            )}
+                          </div>
+                        )}
 
                         <div>
                           <label className="block text-sm font-medium text-mist/70 mb-2">Pickup Terminal</label>

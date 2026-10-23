@@ -199,6 +199,7 @@ CREATE TABLE card_reservations (
     contact VARCHAR(20) NOT NULL,
     card_type VARCHAR(50) NOT NULL, -- Card type name
     pickup_terminal VARCHAR(100) NOT NULL,
+    id_file TEXT, -- Base64 encoded ID file for Student, PWD, Senior Citizen
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'claimed', 'expired', 'cancelled')),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL, -- 7 days from creation
