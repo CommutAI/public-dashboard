@@ -1175,7 +1175,7 @@ CREATE TABLE IF NOT EXISTS sms_queue (
   id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   phone_number    TEXT        NOT NULL,
   message         TEXT        NOT NULL,
-  type            TEXT        NOT NULL CHECK (type IN ('emergency', 'alighting', 'other')),
+  type            TEXT        NOT NULL CHECK (type IN ('emergency', 'alighting', 'card_reserved', 'card_claimed', 'other')),
   priority        INTEGER     DEFAULT 5 CHECK (priority BETWEEN 1 AND 10),
   related_id      UUID,
   trip_id         UUID        REFERENCES trips (id),
@@ -1187,6 +1187,28 @@ CREATE TABLE IF NOT EXISTS sms_queue (
   retry_count     INTEGER     DEFAULT 0,
   max_retries     INTEGER     DEFAULT 3
 );
+
+-- Trigger to queue SMS when card reservation is created
+CREATE OR REPLACE FUNCTION queue_sms_on_card_reserved()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  -- Trigger on INSERT (new reservation)
+  INSERT INTO sms_queue (phone_number, message, type, priority, related_id)
+  VALUES (
+    NEW.contact,
+    'Reservation Confirmed! ID: ' || NEW.reservation_id || '. Card Type: ' || NEW.card_type || '. Pickup: ' || NEW.pickup_terminal || '. Claim within 7 days. Thank you for using CommutAI!',
+    'card_reserved',
+    7, -- High priority for reservation confirmations
+    gen_random_uuid()::UUID
+  );
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_card_reservation_created ON card_reservations;
+CREATE TRIGGER on_card_reservation_created
+  AFTER INSERT ON card_reservations
+  FOR EACH ROW EXECUTE FUNCTION queue_sms_on_card_reserved();
 
 -- ============================================================
 -- 26. HARDWARE STATUS
