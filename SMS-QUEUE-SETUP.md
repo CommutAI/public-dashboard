@@ -24,7 +24,7 @@ The `sms_queue` table stores SMS messages with the following fields:
 | id | UUID | Primary key |
 | phone_number | TEXT | Recipient phone number |
 | message | TEXT | SMS message content |
-| type | TEXT | Message type (emergency, alighting, other, admin, test, reservation_confirmation, card_approved, card_declined, emergency_bus, trip_completion, topup, card_reserved, card_claimed) |
+| type | TEXT | Message type (emergency, alighting, other, admin, test, reservation_confirmation, card_approved, card_declined, emergency_bus, trip_completion, topup) |
 | priority | INTEGER | Priority level (1-10, higher = more important) |
 | related_id | UUID | Optional related entity ID |
 | trip_id | UUID | Optional trip ID |
