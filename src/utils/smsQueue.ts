@@ -42,17 +42,19 @@ export async function queueSMS(sms: SMSQueueItem): Promise<{ success: boolean; e
   }
 
   try {
+    const insertData: any = {
+      phone_number: sms.phone_number,
+      message: sms.message,
+      type: sms.type,
+      priority: sms.priority || 5,
+      related_id: sms.related_id,
+      trip_id: sms.trip_id,
+      status: 'pending'
+    }
+
     const result = await supabase
       .from('sms_queue')
-      .insert({
-        phone_number: sms.phone_number,
-        message: sms.message,
-        type: sms.type,
-        priority: sms.priority || 5,
-        related_id: sms.related_id,
-        trip_id: sms.trip_id,
-        status: 'pending'
-      } as any)
+      .insert(insertData)
       .select()
       .single()
 
