@@ -42,7 +42,7 @@ export async function queueSMS(sms: SMSQueueItem): Promise<{ success: boolean; e
   }
 
   try {
-    const { data, error } = await supabase
+    const result = await supabase
       .from('sms_queue')
       .insert({
         phone_number: sms.phone_number,
@@ -52,9 +52,11 @@ export async function queueSMS(sms: SMSQueueItem): Promise<{ success: boolean; e
         related_id: sms.related_id,
         trip_id: sms.trip_id,
         status: 'pending'
-      })
+      } as any)
       .select()
-      .single() as { data: SMSQueueData | null; error: any }
+      .single()
+
+    const { data, error } = result as { data: SMSQueueData | null; error: any }
 
     if (error) {
       console.error('Failed to queue SMS:', error)
