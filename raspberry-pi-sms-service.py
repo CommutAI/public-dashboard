@@ -196,7 +196,7 @@ class SMSQueueProcessor:
         return self.sim900a.connect()
 
     def get_pending_sms(self, limit: int = 10) -> List[Dict]:
-        """Fetch pending SMS from queue"""
+        """Fetch approved SMS from queue ready to send"""
         if not self.supabase:
             logger.warning("Supabase not available, cannot fetch queue")
             return []
@@ -204,19 +204,47 @@ class SMSQueueProcessor:
         try:
             result = self.supabase.table('sms_queue') \
                 .select('*') \
-                .eq('status', 'pending') \
+                .in_('status', ['approved', 'pending']) \
                 .order('priority', desc=True) \
                 .order('created_at') \
                 .limit(limit) \
                 .execute()
 
             if result.data:
-                logger.info(f"Fetched {len(result.data)} pending SMS from queue")
+                logger.info(f"Fetched {len(result.data)} SMS ready to send")
                 return result.data
             return []
         except Exception as e:
-            logger.error(f"Failed to fetch pending SMS: {e}")
+            logger.error(f"Failed to fetch SMS: {e}")
             return []
+
+    def check_auto_approve_sms(self):
+        """Check for SMS past deadline and auto-approve them"""
+        if not self.supabase:
+            return
+
+        try:
+            now = datetime.now().isoformat()
+            result = self.supabase.table('sms_queue') \
+                .select('*') \
+                .eq('status', 'awaiting_approval') \
+                .lt('approval_deadline', now) \
+                .execute()
+
+            if result.data:
+                logger.info(f"Auto-approving {len(result.data)} SMS past deadline")
+                for sms in result.data:
+                    self.supabase.table('sms_queue') \
+                        .update({
+                            'status': 'approved',
+                            'approved_at': now,
+                            'approved_by': 'system_auto'
+                        }) \
+                        .eq('id', sms['id']) \
+                        .execute()
+                    logger.info(f"Auto-approved SMS {sms['id']}")
+        except Exception as e:
+            logger.error(f"Failed to auto-approve SMS: {e}")
 
     def update_sms_status(self, sms_id: str, status: str, error_message: str = None):
         """Update SMS status in database"""
@@ -245,20 +273,62 @@ class SMSQueueProcessor:
         except Exception as e:
             logger.error(f"Failed to update SMS status: {e}")
 
-    def process_queue(self):
-        """Process pending SMS queue"""
-        pending_sms = self.get_pending_sms()
+    def approve_sms(self, sms_id: str, approved_by: str = 'system'):
+        """Manually approve an SMS"""
+        if not self.supabase:
+            return False
 
-        if not pending_sms:
+        try:
+            self.supabase.table('sms_queue') \
+                .update({
+                    'status': 'approved',
+                    'approved_at': datetime.now().isoformat(),
+                    'approved_by': approved_by
+                }) \
+                .eq('id', sms_id) \
+                .execute()
+            logger.info(f"SMS {sms_id} approved by {approved_by}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to approve SMS: {e}")
+            return False
+
+    def cancel_sms(self, sms_id: str, reason: str = 'Cancelled by admin'):
+        """Cancel/reject an SMS"""
+        if not self.supabase:
+            return False
+
+        try:
+            self.supabase.table('sms_queue') \
+                .update({
+                    'status': 'cancelled',
+                    'error_message': reason
+                }) \
+                .eq('id', sms_id) \
+                .execute()
+            logger.info(f"SMS {sms_id} cancelled: {reason}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to cancel SMS: {e}")
+            return False
+
+    def process_queue(self):
+        """Process approved SMS queue"""
+        # First check for auto-approval
+        self.check_auto_approve_sms()
+
+        approved_sms = self.get_pending_sms()
+
+        if not approved_sms:
             return
 
-        logger.info(f"Processing {len(pending_sms)} pending SMS")
+        logger.info(f"Processing {len(approved_sms)} SMS ready to send")
 
-        for sms in pending_sms:
+        for sms in approved_sms:
             sms_id = sms.get('id')
             phone_number = sms.get('phone_number')
             message = sms.get('message')
-            sms_type = sms.get('type')
+            sms_type = sms.get('sms_type')
             retry_count = sms.get('retry_count', 0)
             max_retries = sms.get('max_retries', 3)
 
@@ -267,6 +337,10 @@ class SMSQueueProcessor:
                 logger.warning(f"SMS {sms_id} exceeded max retries, marking as failed")
                 self.update_sms_status(sms_id, 'failed', 'Max retries exceeded')
                 continue
+
+            # If SMS is approved, change to pending before sending
+            if sms.get('status') == 'approved':
+                self.update_sms_status(sms_id, 'pending')
 
             # Send SMS
             success = self.sim900a.send_sms(phone_number, message)

@@ -31,6 +31,8 @@ export interface SMSQueueItem {
   priority?: number
   related_id?: string
   trip_id?: string
+  requireApproval?: boolean
+  approvalHours?: number
 }
 
 /**
@@ -45,11 +47,20 @@ export async function queueSMS(sms: SMSQueueItem): Promise<{ success: boolean; e
     const insertData: any = {
       phone_number: sms.phone_number,
       message: sms.message,
-      type: sms.type,
+      sms_type: sms.type,
       priority: sms.priority || 5,
       related_id: sms.related_id,
       trip_id: sms.trip_id,
-      status: 'pending'
+      status: sms.requireApproval ? 'awaiting_approval' : 'pending'
+    }
+
+    // Add approval deadline if approval is required
+    if (sms.requireApproval) {
+      const approvalHours = sms.approvalHours || 48
+      const deadline = new Date()
+      deadline.setHours(deadline.getHours() + approvalHours)
+      insertData.approval_deadline = deadline.toISOString()
+      insertData.auto_approve_after_hours = approvalHours
     }
 
     const result = await supabase
@@ -93,7 +104,9 @@ export async function queueCardReservationSMS(
     phone_number: phone,
     message,
     type: 'card_reserved',
-    priority: 7
+    priority: 7,
+    requireApproval: true,
+    approvalHours: 48
   })
 }
 
@@ -150,4 +163,95 @@ export async function queueTripCompletionSMS(
     type: 'alighting',
     priority: 5
   })
+}
+
+/**
+ * Get SMS awaiting approval
+ */
+export async function getSMSAwaitingApproval(): Promise<{ success: boolean; data?: any[]; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    const result = await supabase
+      .from('sms_queue')
+      .select('*')
+      .eq('status', 'awaiting_approval')
+      .order('created_at', { ascending: false })
+      .limit(50)
+
+    const { data, error } = result
+
+    if (error) {
+      console.error('Failed to fetch SMS awaiting approval:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, data: data || [] }
+  } catch (e) {
+    console.error('Error fetching SMS awaiting approval:', e)
+    return { success: false, error: 'Unknown error' }
+  }
+}
+
+/**
+ * Approve an SMS
+ */
+export async function approveSMS(smsId: string, approvedBy: string): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    const { error } = await supabase
+      .from('sms_queue')
+      .update({
+        status: 'approved',
+        approved_at: new Date().toISOString(),
+        approved_by: approvedBy
+      })
+      .eq('id', smsId)
+
+    if (error) {
+      console.error('Failed to approve SMS:', error)
+      return { success: false, error: error.message }
+    }
+
+    console.log(`SMS ${smsId} approved by ${approvedBy}`)
+    return { success: true }
+  } catch (e) {
+    console.error('Error approving SMS:', e)
+    return { success: false, error: 'Unknown error' }
+  }
+}
+
+/**
+ * Cancel/reject an SMS
+ */
+export async function cancelSMS(smsId: string, reason: string): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
+  try {
+    const { error } = await supabase
+      .from('sms_queue')
+      .update({
+        status: 'cancelled',
+        error_message: reason
+      })
+      .eq('id', smsId)
+
+    if (error) {
+      console.error('Failed to cancel SMS:', error)
+      return { success: false, error: error.message }
+    }
+
+    console.log(`SMS ${smsId} cancelled: ${reason}`)
+    return { success: true }
+  } catch (e) {
+    console.error('Error cancelling SMS:', e)
+    return { success: false, error: 'Unknown error' }
+  }
 }
