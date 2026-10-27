@@ -91,20 +91,16 @@ const agoraIcon = L.divIcon({
   popupAnchor: [0, -12]
 })
 const createBusIcon = (location?: string) => {
-  const locationText = location || 'Bus Location';
   return L.divIcon({
     className: 'bus-marker',
     html: `
       <div style="display: flex; flex-direction: column; align-items: center;">
-        <div style="background-color: rgba(0,0,0,0.8); color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; margin-bottom: 4px; border: 1px solid rgba(255,255,255,0.2);">
-          ${locationText}
-        </div>
         <div style="background-color: #22c55e; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(34,197,94,0.6); animation: busPulse 1.5s infinite;"></div>
       </div>
     `,
-    iconSize: [80, 40],
-    iconAnchor: [40, 20],
-    popupAnchor: [0, -20]
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+    popupAnchor: [0, -10]
   })
 }
 
@@ -658,16 +654,18 @@ function App() {
         setGpsStatus('connecting')
         setEstimatedArrival('Connecting...')
         
-        // First try to fetch from gps_logs table
+        // First try to fetch from gps_locations table
         const { data: gpsLogsData, error: logsError } = await supabase
-          .from('gps_logs')
-          .select('lat, lng, recorded_at, trip_id')
+          .from('gps_locations')
+          .select('latitude, longitude, recorded_at, trip_id')
           .order('recorded_at', { ascending: false })
           .limit(1)
           .maybeSingle()
 
+        console.log('GPS fetch result:', { gpsLogsData, logsError })
+
         let gpsData: any = gpsLogsData
-        let dataSource = 'gps_logs'
+        let dataSource = 'gps_locations'
 
         // If no data in gps_logs, try trips table as fallback
         if (!gpsData) {
@@ -681,8 +679,8 @@ function App() {
 
           if (tripsData && tripsData.current_lat && tripsData.current_lng) {
             gpsData = {
-              lat: tripsData.current_lat,
-              lng: tripsData.current_lng,
+              latitude: tripsData.current_lat,
+              longitude: tripsData.current_lng,
               recorded_at: tripsData.gps_updated_at,
               trip_id: tripsData.id
             } as any
@@ -693,13 +691,16 @@ function App() {
 
 
         if (gpsData) {
-          const lat = parseFloat((gpsData as any).lat)
-          const lng = parseFloat((gpsData as any).lng)
+          const lat = parseFloat((gpsData as any).latitude || (gpsData as any).lat)
+          const lng = parseFloat((gpsData as any).longitude || (gpsData as any).lng)
+
+          console.log('GPS Data received:', { lat, lng, gpsData, dataSource })
 
           if (Number.isFinite(lat) && Number.isFinite(lng)) {
             setBusCoordinates([lat, lng])
             setGpsStatus('active')
             setLastGpsUpdate((gpsData as any).recorded_at)
+            console.log('Bus coordinates set:', [lat, lng])
 
             // Check if near any stop
             let nearestIndex = null
@@ -778,11 +779,13 @@ function App() {
           }
         } else {
           // No GPS data available from any source
+          console.log('No GPS data found in database')
           setGpsStatus('error')
           setBusLocationName('Schedule coming soon')
           setEstimatedArrival('Schedule check')
         }
       } catch (error) {
+        console.error('GPS fetch error:', error)
         setGpsStatus('error')
         setBusLocationName('Schedule coming soon')
         setEstimatedArrival('Schedule check')
@@ -798,8 +801,11 @@ function App() {
 
     if (supabase) {
       gpsLogsSubscription = supabase
-        .channel('public-dashboard-gps-logs-channel')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gps_logs' }, () => {
+        .channel('public-dashboard-gps-locations-channel')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gps_locations' }, () => {
+          fetchBusGPS()
+        })
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gps_locations' }, () => {
           fetchBusGPS()
         })
         .subscribe()
@@ -993,14 +999,14 @@ function App() {
                   </div>
                 ) : (
                   <div id="map-container" className="w-full h-full">
-                    <MapContainer 
-                      center={busStops[0]?.coordinates || [8.366308873785245, 124.86500795847]} 
-                      zoom={11} 
+                    <MapContainer
+                      center={busStops[0]?.coordinates || [8.366308873785245, 124.86500795847]}
+                      zoom={11}
                       style={{ height: '100%', width: '100%' }}
-                      dragging={false}
-                      scrollWheelZoom={false}
-                      doubleClickZoom={false}
-                      touchZoom={false}
+                      dragging={true}
+                      scrollWheelZoom={true}
+                      doubleClickZoom={true}
+                      touchZoom={true}
                     >
                       <TileLayer
                         attribution=""
@@ -1049,7 +1055,7 @@ function App() {
                   </div>
                 )}
                 <p className="absolute bottom-2 left-2 z-[1000] text-[10px] font-mono text-mist/40 pointer-events-none">
-                  {busStops.length > 0 
+                  {busStops.length > 0
                     ? `${busStops[0].location} → ${busStops[busStops.length - 1].location}`
                     : 'Loading route data...'
                   }
