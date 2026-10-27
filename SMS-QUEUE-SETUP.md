@@ -6,13 +6,13 @@ This document describes how to set up the database-driven SMS queue system for t
 
 The SMS queue system decouples the frontend from the SMS sending infrastructure:
 - **Frontend**: Queues SMS messages to Supabase `sms_queue` table
-- **Raspberry Pi**: Polls the queue and sends SMS via GSM modem or SMS gateway
+- **Raspberry Pi**: Polls the queue and sends SMS via SIM900A GSM module
 - **Benefits**: No direct API calls from frontend, better error handling, retry logic, and scalability
 
 ## Architecture
 
 ```
-Frontend (React) → Supabase (sms_queue table) ← Raspberry Pi (SMS Processor) → GSM Modem/SMS Gateway
+Frontend (React) → Supabase (sms_queue table) ← Raspberry Pi (SMS Processor) → SIM900A GSM Module
 ```
 
 ## Database Schema
@@ -24,7 +24,7 @@ The `sms_queue` table stores SMS messages with the following fields:
 | id | UUID | Primary key |
 | phone_number | TEXT | Recipient phone number |
 | message | TEXT | SMS message content |
-| type | TEXT | Message type (emergency, alighting, other) |
+| sms_type | TEXT | Message type (emergency, alighting, other) |
 | priority | INTEGER | Priority level (1-10, higher = more important) |
 | related_id | UUID | Optional related entity ID |
 | trip_id | UUID | Optional trip ID |
@@ -33,8 +33,8 @@ The `sms_queue` table stores SMS messages with the following fields:
 | sent_at | TIMESTAMPTZ | Sent timestamp |
 | failed_at | TIMESTAMPTZ | Failed timestamp |
 | error_message | TEXT | Error details if failed |
-| retry_count | INTEGER | Number of retry attempts |
-| max_retries | INTEGER | Maximum retry attempts (default: 3) |
+| attempts | INTEGER | Number of retry attempts |
+| max_attempts | INTEGER | Maximum retry attempts (default: 3) |
 
 ## Raspberry Pi Setup
 
@@ -59,15 +59,15 @@ Create `/home/pi/.sms-processor.env`:
 ```bash
 # Supabase Configuration
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_KEY=your-service-role-key
+SUPABASE_KEY=your-service-role-key
+
+# SIM900A Configuration
+SIM900A_PORT=/dev/ttyUSB0
+SIM900A_BAUDRATE=9600
 
 # SMS Configuration
-SMS_POLL_INTERVAL=5  # Poll interval in seconds
+SMS_POLL_INTERVAL=30  # Poll interval in seconds
 MAX_CONCURRENT_SMS=3  # Max SMS to process per poll
-
-# SMS Gateway Configuration (if using external gateway)
-SMS_GATEWAY_URL=https://your-sms-gateway.com/api/send
-SMS_GATEWAY_API_KEY=your-gateway-api-key
 ```
 
 Load environment variables:
@@ -78,31 +78,23 @@ echo 'source /home/pi/.sms-processor.env' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### 3. GSM Modem Setup (Optional)
+### 3. SIM900A Setup
 
-If using a GSM modem directly connected to the Raspberry Pi:
+Connect SIM900A module to Raspberry Pi via USB or UART:
 
 ```bash
-# Install GSM utilities
+# Check if SIM900A is detected
+lsusb
+ls -l /dev/ttyUSB*
+
+# Test connection with minicom
 sudo apt install minicom
+sudo minicom -D /dev/ttyUSB0 -b 9600
 
-# Test modem connection
-sudo minicom -D /dev/ttyUSB0 -b 115200
-
-# Configure gammu (if using gammu)
-sudo gammu-config
-```
-
-Create `/etc/gammurc`:
-
-```ini
-[gammu]
-port = /dev/ttyUSB0
-connection = at115200
-model = auto
-synchronizetime = yes
-logfile = /var/log/gammu.log
-logformat = textall
+# In minicom, send AT commands to test:
+# AT
+# AT+CREG?
+# AT+CSQ
 ```
 
 ### 4. Set Up as System Service
@@ -151,32 +143,19 @@ sudo journalctl -u sms-processor -f
 ### Queue SMS from React
 
 ```typescript
-import { createClient } from '@supabase/supabase-js'
+import { queueSMS, sendEmergencyAlert, sendAlightingNotification } from './sms-queue'
 
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-)
+// Queue SMS directly
+await queueSMS({
+  phone_number: '+639123456789',
+  message: 'Your message here',
+  sms_type: 'other',
+  priority: 5
+})
 
-async function queueSMS(phoneNumber: string, message: string, type: 'emergency' | 'alighting' | 'other') {
-  const { data, error } = await supabase
-    .from('sms_queue')
-    .insert({
-      phone_number: phoneNumber,
-      message: message,
-      type: type,
-      priority: type === 'emergency' ? 10 : 5,
-      status: 'pending'
-    })
-
-  if (error) {
-    console.error('Failed to queue SMS:', error)
-    return false
-  }
-
-  console.log('SMS queued successfully:', data)
-  return true
-}
+// Or use helper functions
+await sendEmergencyAlert('+639123456789', 'Manolo Fortich Terminal')
+await sendAlightingNotification('+639123456789', 'Agora Terminal', 5)
 ```
 
 ### Example: Emergency Alert
@@ -260,8 +239,8 @@ GROUP BY status;
 
 ```sql
 UPDATE sms_queue
-SET status = 'pending', retry_count = 0, error_message = NULL
-WHERE status = 'failed' AND retry_count < max_retries;
+SET status = 'pending', attempts = 0, error_message = NULL
+WHERE status = 'failed' AND attempts < max_attempts;
 ```
 
 ### Cleanup Old Messages
@@ -378,7 +357,7 @@ CREATE INDEX idx_sms_queue_priority ON sms_queue(priority, created_at);
 await supabase.from('sms_queue').insert({
   phone_number: '+639123456789',
   message: 'Test message from queue',
-  type: 'other',
+  sms_type: 'other',
   priority: 1,
   status: 'pending'
 })
