@@ -334,7 +334,7 @@ class SMSQueueProcessor:
 
         except KeyboardInterrupt:
             logger.info("Shutting down...")
-            break
+            return
         except Exception as e:
             logger.error(f"Error in main loop: {e}")
             time.sleep(self.poll_interval)
