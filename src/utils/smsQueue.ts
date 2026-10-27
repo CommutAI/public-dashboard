@@ -210,7 +210,7 @@ export async function approveSMS(smsId: string, approvedBy: string): Promise<{ s
         status: 'approved',
         approved_at: new Date().toISOString(),
         approved_by: approvedBy
-      })
+      } as any)
       .eq('id', smsId)
 
     if (error) {
@@ -240,7 +240,7 @@ export async function cancelSMS(smsId: string, reason: string): Promise<{ succes
       .update({
         status: 'cancelled',
         error_message: reason
-      })
+      } as any)
       .eq('id', smsId)
 
     if (error) {
