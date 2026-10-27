@@ -8,12 +8,16 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-const supabase = createClient(supabaseUrl!, supabaseKey!)
+let supabase: ReturnType<typeof createClient> | null = null
+
+if (supabaseUrl && supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey)
+}
 
 export interface SMSQueueItem {
   phone_number: string
   message: string
-  sms_type: 'emergency' | 'alighting' | 'card_reserved' | 'card_claimed' | 'other'
+  type: 'emergency' | 'alighting' | 'card_reserved' | 'card_claimed' | 'other'
   priority?: number
   related_id?: string
   trip_id?: string
@@ -23,13 +27,17 @@ export interface SMSQueueItem {
  * Queue SMS to Supabase for processing by Raspberry Pi
  */
 export async function queueSMS(sms: SMSQueueItem): Promise<{ success: boolean; error?: string; id?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
   try {
     const { data, error } = await supabase
       .from('sms_queue')
       .insert({
         phone_number: sms.phone_number,
         message: sms.message,
-        sms_type: sms.sms_type,
+        type: sms.type,
         priority: sms.priority || 5,
         related_id: sms.related_id,
         trip_id: sms.trip_id,
@@ -66,7 +74,7 @@ export async function queueCardReservationSMS(
   return queueSMS({
     phone_number: phone,
     message,
-    sms_type: 'card_reserved',
+    type: 'card_reserved',
     priority: 7
   })
 }
@@ -79,6 +87,10 @@ export async function queueEmergencySMS(
   message: string,
   location?: { lat: number; lng: number }
 ): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
   const locationText = location ? ` Location: ${location.lat}, ${location.lng}` : ''
   const fullMessage = `EMERGENCY: ${message}${locationText}`
 
@@ -87,7 +99,7 @@ export async function queueEmergencySMS(
       queueSMS({
         phone_number: phone,
         message: fullMessage,
-        sms_type: 'emergency',
+        type: 'emergency',
         priority: 10
       })
     )
@@ -117,7 +129,7 @@ export async function queueTripCompletionSMS(
   return queueSMS({
     phone_number: phone,
     message,
-    sms_type: 'alighting',
+    type: 'alighting',
     priority: 5
   })
 }

@@ -8,11 +8,11 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Supabase URL and Anon Key must be configured')
-}
+let supabase: SupabaseClient | null = null
 
-const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey)
+if (supabaseUrl && supabaseAnonKey) {
+  supabase = createClient(supabaseUrl, supabaseAnonKey)
+}
 
 export type SMSType = 'emergency' | 'alighting' | 'other'
 
@@ -29,6 +29,11 @@ export interface SMSQueueMessage {
  * Queue an SMS message to be sent by the Raspberry Pi processor
  */
 export async function queueSMS(message: SMSQueueMessage): Promise<{ success: boolean; error?: string; data?: any }> {
+  if (!supabase) {
+    console.error('Supabase client not initialized')
+    return { success: false, error: 'Supabase not configured' }
+  }
+
   try {
     const { data, error } = await supabase
       .from('sms_queue')
@@ -61,6 +66,10 @@ export async function queueSMS(message: SMSQueueMessage): Promise<{ success: boo
  * Send an emergency alert SMS
  */
 export async function sendEmergencyAlert(phoneNumber: string, location: string, details?: string): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
   const message = details
     ? `EMERGENCY ALERT: CommutAI bus needs assistance at ${location}. ${details}. Please respond immediately.`
     : `EMERGENCY ALERT: CommutAI bus needs assistance at ${location}. Please respond immediately.`
@@ -77,6 +86,10 @@ export async function sendEmergencyAlert(phoneNumber: string, location: string, 
  * Send an alighting notification SMS
  */
 export async function sendAlightingNotification(phoneNumber: string, stopName: string, etaMinutes?: number): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
   const message = etaMinutes
     ? `Your bus is approaching ${stopName} in approximately ${etaMinutes} minutes. Please prepare to alight.`
     : `Your bus is approaching ${stopName}. Please prepare to alight.`
@@ -93,6 +106,10 @@ export async function sendAlightingNotification(phoneNumber: string, stopName: s
  * Send a general notification SMS
  */
 export async function sendNotificationSMS(phoneNumber: string, message: string): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Supabase not configured' }
+  }
+
   return queueSMS({
     phone_number: phoneNumber,
     message,
@@ -105,6 +122,10 @@ export async function sendNotificationSMS(phoneNumber: string, message: string):
  * Queue multiple SMS messages in batch
  */
 export async function queueSMSBatch(messages: SMSQueueMessage[]): Promise<{ success: boolean; errors: string[] }> {
+  if (!supabase) {
+    return { success: false, errors: ['Supabase not configured'] }
+  }
+
   const errors: string[] = []
 
   for (const msg of messages) {
