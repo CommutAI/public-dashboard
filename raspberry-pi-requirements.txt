@@ -1,0 +1,6 @@
+# SMS Queue Processor Dependencies
+supabase>=2.0.0
+requests>=2.31.0
+# Optional: for GSM modem support
+# gammu>=3.2.0
+# pyserial>=3.5

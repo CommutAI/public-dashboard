@@ -176,7 +176,28 @@ CREATE TABLE IF NOT EXISTS baggage_fee_matrix (
 );
 
 -- ============================================================
--- 9. ANNOUNCEMENTS
+-- 9. SMS QUEUE
+-- SMS queue for Raspberry Pi processing
+-- ============================================================
+CREATE TABLE IF NOT EXISTS sms_queue (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  phone_number    TEXT        NOT NULL,
+  message         TEXT        NOT NULL,
+  type            TEXT        NOT NULL CHECK (type IN ('emergency', 'alighting', 'other')),
+  priority        INTEGER     DEFAULT 5 CHECK (priority BETWEEN 1 AND 10),
+  related_id      UUID,
+  trip_id         UUID,
+  status          TEXT        DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed', 'cancelled')),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  sent_at         TIMESTAMPTZ,
+  failed_at       TIMESTAMPTZ,
+  error_message   TEXT,
+  retry_count     INTEGER     DEFAULT 0,
+  max_retries     INTEGER     DEFAULT 3
+);
+
+-- ============================================================
+-- 10. ANNOUNCEMENTS
 -- System announcements
 -- ============================================================
 CREATE TABLE IF NOT EXISTS announcements (
@@ -226,6 +247,10 @@ CREATE INDEX IF NOT EXISTS idx_fare_matrix_route ON fare_matrix(route_from, rout
 -- Baggage fee matrix
 CREATE INDEX IF NOT EXISTS idx_baggage_fee_matrix_category ON baggage_fee_matrix(category);
 
+-- SMS queue
+CREATE INDEX IF NOT EXISTS idx_sms_queue_status ON sms_queue(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_sms_queue_priority ON sms_queue(priority, created_at);
+
 -- ============================================================
 -- ROW LEVEL SECURITY (RLS)
 -- ============================================================
@@ -239,6 +264,7 @@ ALTER TABLE card_types ENABLE ROW LEVEL SECURITY;
 ALTER TABLE card_reservations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fare_matrix ENABLE ROW LEVEL SECURITY;
 ALTER TABLE baggage_fee_matrix ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sms_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE announcements ENABLE ROW LEVEL SECURITY;
 
 -- =====================
@@ -285,6 +311,15 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'baggage_fee_matrix' AND policyname = 'Public read access on baggage_fee_matrix') THEN
     CREATE POLICY "Public read access on baggage_fee_matrix" ON baggage_fee_matrix FOR SELECT USING (true);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'sms_queue' AND policyname = 'Service role SMS queue access') THEN
+    CREATE POLICY "Service role SMS queue access" ON sms_queue FOR ALL
+      USING (true)
+      WITH CHECK (true);
   END IF;
 END $$;
 
