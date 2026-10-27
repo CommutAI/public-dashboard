@@ -14,6 +14,16 @@ if (supabaseUrl && supabaseKey) {
   supabase = createClient(supabaseUrl, supabaseKey)
 }
 
+type SMSQueueData = {
+  id: string
+  phone_number: string
+  message: string
+  type: string
+  priority: number
+  status: string
+  created_at: string
+}
+
 export interface SMSQueueItem {
   phone_number: string
   message: string
@@ -44,11 +54,15 @@ export async function queueSMS(sms: SMSQueueItem): Promise<{ success: boolean; e
         status: 'pending'
       })
       .select()
-      .single()
+      .single() as { data: SMSQueueData | null; error: any }
 
     if (error) {
       console.error('Failed to queue SMS:', error)
       return { success: false, error: error.message }
+    }
+
+    if (!data) {
+      return { success: false, error: 'No data returned' }
     }
 
     console.log('SMS queued successfully:', data.id)
