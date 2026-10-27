@@ -371,7 +371,7 @@ SERIAL_PORT = '/dev/ttyUSB0'  # or '/dev/ttyACM0'
 
 Edit the trigger in `database/schema.sql`:
 ```sql
-'Reservation Confirmed! ID: ' || NEW.reservation_id || '. Card Type: ' || NEW.card_type || '. Pickup: ' || NEW.pickup_terminal || '. Claim within 7 days. Thank you for using CommutAI!'
+'Reservation Confirmed! ID: ' || NEW.reservation_id || '. Card Type: ' || NEW.card_type || '. Pickup: ' || NEW.pickup_terminal || '. Approval within 1-2 days. Thank you for using CommutAI!'
 ```
 
 ## License

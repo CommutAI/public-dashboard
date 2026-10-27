@@ -511,9 +511,9 @@ function App() {
     // Generate unique reservation ID
     const reservationId = `RES-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
 
-    // Calculate expiration date (7 days from now)
+    // Calculate expiration date (2 days from now)
     const expirationDate = new Date()
-    expirationDate.setDate(expirationDate.getDate() + 7)
+    expirationDate.setDate(expirationDate.getDate() + 2)
 
     try {
       // Convert file to base64 if provided
@@ -1659,7 +1659,7 @@ function App() {
                           <ol className="text-sm text-mist/70 space-y-1 list-decimal list-inside">
                             <li>Visit {reservationData.terminal || 'your preferred terminal'} customer service booth</li>
                             <li>Show this reservation ID: <span className="font-mono font-semibold text-amber">{reservationData.reservationId}</span></li>
-                            <li>Claim your card within 7 days (by {new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString()})</li>
+                            <li>Claim your card within 1-2 days (by {new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toLocaleDateString()})</li>
                             <li>Present valid ID for verification</li>
                             <li>Receive your QR card and top up balance</li>
                           </ol>
@@ -2071,7 +2071,7 @@ function App() {
                     </div>
                   </div>
                   <p className="leading-relaxed">
-                    Please claim your card within 7 days from your selected pickup terminal. Bring a valid ID for verification.
+                    Please claim your card within 1-2 days from your selected pickup terminal. Bring a valid ID for verification.
                   </p>
                 </div>
 

@@ -87,7 +87,7 @@ export async function queueCardReservationSMS(
   cardType: string,
   pickupTerminal: string
 ): Promise<{ success: boolean; error?: string }> {
-  const message = `Dear ${name}, card reserved. ID: ${reservationId}. Pickup: ${pickupTerminal}. Pay P110. Claim within 7 days. CommutAI`
+  const message = `Dear ${name}, card reserved. ID: ${reservationId}. Pickup: ${pickupTerminal}. Pay P110. Approval within 1-2 days. CommutAI`
 
   return queueSMS({
     phone_number: phone,
