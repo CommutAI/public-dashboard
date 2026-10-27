@@ -183,7 +183,7 @@ CREATE TABLE IF NOT EXISTS sms_queue (
   id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   phone_number    TEXT        NOT NULL,
   message         TEXT        NOT NULL,
-  type            TEXT        NOT NULL CHECK (type IN ('emergency', 'alighting', 'other', 'card_reserved')),
+  type            TEXT        NOT NULL CHECK (type IN ('emergency', 'alighting', 'other', 'card_reserved', 'card_claimed')),
   priority        INTEGER     DEFAULT 5 CHECK (priority BETWEEN 1 AND 10),
   related_id      UUID,
   trip_id         UUID,

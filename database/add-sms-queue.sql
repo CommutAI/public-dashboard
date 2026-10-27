@@ -9,7 +9,7 @@ BEGIN
       id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
       phone_number    TEXT        NOT NULL,
       message         TEXT        NOT NULL,
-      type            TEXT        NOT NULL CHECK (type IN ('emergency', 'alighting', 'other', 'card_reserved')),
+      type            TEXT        NOT NULL CHECK (type IN ('emergency', 'alighting', 'other', 'card_reserved', 'card_claimed')),
       priority        INTEGER     DEFAULT 5 CHECK (priority BETWEEN 1 AND 10),
       related_id      UUID,
       trip_id         UUID,
@@ -41,4 +41,23 @@ BEGIN
   ELSE
     RAISE NOTICE 'sms_queue table already exists';
   END IF;
+END $$;
+
+-- If table already exists, update the check constraint to include missing types
+DO $$
+BEGIN
+  -- Drop existing constraint if it exists
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'sms_queue_type_check'
+  ) THEN
+    ALTER TABLE sms_queue DROP CONSTRAINT sms_queue_type_check;
+  END IF;
+
+  -- Add updated constraint with all required types
+  ALTER TABLE sms_queue
+  ADD CONSTRAINT sms_queue_type_check
+  CHECK (type IN ('emergency', 'alighting', 'other', 'card_reserved', 'card_claimed'));
+
+  RAISE NOTICE 'sms_queue type check constraint updated';
 END $$;
