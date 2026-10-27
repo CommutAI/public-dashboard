@@ -24,7 +24,7 @@ The `sms_queue` table stores SMS messages with the following fields:
 | id | UUID | Primary key |
 | phone_number | TEXT | Recipient phone number |
 | message | TEXT | SMS message content |
-| sms_type | TEXT | Message type (emergency, alighting, other) |
+| type | TEXT | Message type (emergency, alighting, other, card_reserved) |
 | priority | INTEGER | Priority level (1-10, higher = more important) |
 | related_id | UUID | Optional related entity ID |
 | trip_id | UUID | Optional trip ID |
@@ -33,8 +33,8 @@ The `sms_queue` table stores SMS messages with the following fields:
 | sent_at | TIMESTAMPTZ | Sent timestamp |
 | failed_at | TIMESTAMPTZ | Failed timestamp |
 | error_message | TEXT | Error details if failed |
-| attempts | INTEGER | Number of retry attempts |
-| max_attempts | INTEGER | Maximum retry attempts (default: 3) |
+| retry_count | INTEGER | Number of retry attempts |
+| max_retries | INTEGER | Maximum retry attempts (default: 3) |
 
 ## Raspberry Pi Setup
 
@@ -239,8 +239,8 @@ GROUP BY status;
 
 ```sql
 UPDATE sms_queue
-SET status = 'pending', attempts = 0, error_message = NULL
-WHERE status = 'failed' AND attempts < max_attempts;
+SET status = 'pending', retry_count = 0, error_message = NULL
+WHERE status = 'failed' AND retry_count < max_retries;
 ```
 
 ### Cleanup Old Messages
@@ -357,7 +357,7 @@ CREATE INDEX idx_sms_queue_priority ON sms_queue(priority, created_at);
 await supabase.from('sms_queue').insert({
   phone_number: '+639123456789',
   message: 'Test message from queue',
-  sms_type: 'other',
+  type: 'other',
   priority: 1,
   status: 'pending'
 })

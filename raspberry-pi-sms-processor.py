@@ -221,13 +221,13 @@ class SMSQueueProcessor:
             return
 
         try:
-            # Get current attempts
-            current = self.supabase.table('sms_queue').select('attempts').eq('id', sms_id).execute()
-            current_attempts = current.data[0]['attempts'] if current.data else 0
+            # Get current retry_count
+            current = self.supabase.table('sms_queue').select('retry_count').eq('id', sms_id).execute()
+            current_attempts = current.data[0]['retry_count'] if current.data else 0
 
             update_data = {
                 'status': status,
-                'attempts': current_attempts + 1
+                'retry_count': current_attempts + 1
             }
 
             if status == 'sent':
@@ -253,9 +253,9 @@ class SMSQueueProcessor:
             sms_id = sms['id']
             phone_number = sms['phone_number']
             message = sms['message']
-            sms_type = sms.get('sms_type', 'other')
-            max_attempts = sms.get('max_attempts', 3)
-            current_attempts = sms.get('attempts', 0)
+            sms_type = sms.get('type', 'other')
+            max_attempts = sms.get('max_retries', 3)
+            current_attempts = sms.get('retry_count', 0)
 
             logger.info(f"Processing SMS {sms_id} ({sms_type}) - attempt {current_attempts + 1}/{max_attempts}")
 
@@ -280,7 +280,7 @@ class SMSQueueProcessor:
                     try:
                         self.supabase.table('sms_queue').update({
                             'error_message': error,
-                            'attempts': current_attempts + 1
+                            'retry_count': current_attempts + 1
                         }).eq('id', sms_id).execute()
                         logger.warning(f"SMS {sms_id} failed (attempt {current_attempts + 1}/{max_attempts}), will retry")
                     except Exception as e:

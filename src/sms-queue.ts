@@ -19,7 +19,7 @@ export type SMSType = 'emergency' | 'alighting' | 'other'
 export interface SMSQueueMessage {
   phone_number: string
   message: string
-  sms_type: SMSType
+  type: SMSType
   priority?: number
   related_id?: string
   trip_id?: string
@@ -35,8 +35,8 @@ export async function queueSMS(message: SMSQueueMessage): Promise<{ success: boo
       .insert({
         phone_number: message.phone_number,
         message: message.message,
-        sms_type: message.sms_type,
-        priority: message.priority || (message.sms_type === 'emergency' ? 10 : 5),
+        type: message.type,
+        priority: message.priority || (message.type === 'emergency' ? 10 : 5),
         related_id: message.related_id,
         trip_id: message.trip_id,
         status: 'pending'
@@ -68,7 +68,7 @@ export async function sendEmergencyAlert(phoneNumber: string, location: string, 
   return queueSMS({
     phone_number: phoneNumber,
     message,
-    sms_type: 'emergency',
+    type: 'emergency',
     priority: 10
   })
 }
@@ -84,7 +84,7 @@ export async function sendAlightingNotification(phoneNumber: string, stopName: s
   return queueSMS({
     phone_number: phoneNumber,
     message,
-    sms_type: 'alighting',
+    type: 'alighting',
     priority: 5
   })
 }
@@ -96,7 +96,7 @@ export async function sendNotificationSMS(phoneNumber: string, message: string):
   return queueSMS({
     phone_number: phoneNumber,
     message,
-    sms_type: 'other',
+    type: 'other',
     priority: 3
   })
 }
