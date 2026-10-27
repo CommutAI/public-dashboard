@@ -208,9 +208,7 @@ export async function approveSMS(smsId: string, approvedBy: string): Promise<{ s
   }
 
   try {
-    // @ts-ignore - Supabase type system doesn't recognize new approval columns
-    const { error } = await supabase
-      .from('sms_queue')
+    const { error } = await (supabase.from('sms_queue') as any)
       .update({
         status: 'approved',
         approved_at: new Date().toISOString(),
@@ -240,9 +238,7 @@ export async function cancelSMS(smsId: string, reason: string): Promise<{ succes
   }
 
   try {
-    // @ts-ignore - Supabase type system doesn't recognize new approval columns
-    const { error } = await supabase
-      .from('sms_queue')
+    const { error } = await (supabase.from('sms_queue') as any)
       .update({
         status: 'cancelled',
         error_message: reason
