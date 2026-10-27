@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import L from 'leaflet'
 import { Menu, Clock, X, Map, CreditCard, Ticket, Shield, Mail, Phone, MapPin, Lock, FileText, LogIn } from 'lucide-react'
 import { createClient } from '@supabase/supabase-js'
+import { queueCardReservationSMS } from './utils/smsQueue'
 import 'leaflet/dist/leaflet.css'
 
 // Singleton pattern for Supabase client
@@ -552,6 +553,20 @@ function App() {
       if (error) {
         alert(`Failed to create reservation: ${error.message || 'Please try again.'}`)
         return
+      }
+
+      // Queue SMS notification
+      const smsResult = await queueCardReservationSMS(
+        reservationData.contact,
+        reservationData.name,
+        reservationId,
+        reservationData.cardType,
+        reservationData.terminal
+      )
+
+      if (!smsResult.success) {
+        console.error('Failed to queue SMS:', smsResult.error)
+        // Don't fail the reservation if SMS fails, just log it
       }
 
       setReservationData({
