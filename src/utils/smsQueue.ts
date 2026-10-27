@@ -204,13 +204,14 @@ export async function approveSMS(smsId: string, approvedBy: string): Promise<{ s
   }
 
   try {
+    const updateData: Record<string, any> = {
+      status: 'approved',
+      approved_at: new Date().toISOString(),
+      approved_by: approvedBy
+    }
     const { error } = await supabase
       .from('sms_queue')
-      .update({
-        status: 'approved',
-        approved_at: new Date().toISOString(),
-        approved_by: approvedBy
-      } as any)
+      .update(updateData)
       .eq('id', smsId)
 
     if (error) {
@@ -235,12 +236,13 @@ export async function cancelSMS(smsId: string, reason: string): Promise<{ succes
   }
 
   try {
+    const updateData: Record<string, any> = {
+      status: 'cancelled',
+      error_message: reason
+    }
     const { error } = await supabase
       .from('sms_queue')
-      .update({
-        status: 'cancelled',
-        error_message: reason
-      } as any)
+      .update(updateData)
       .eq('id', smsId)
 
     if (error) {
