@@ -8,7 +8,7 @@ SELECT DISTINCT type FROM sms_queue;
 -- This ensures all existing rows will satisfy the new constraint
 UPDATE sms_queue
 SET type = 'other'
-WHERE type NOT IN ('emergency', 'alighting', 'other', 'admin', 'test', 'reservation_confirmation', 'card_approved', 'card_declined', 'emergency_bus', 'trip_completion', 'topup');
+WHERE type NOT IN ('emergency', 'alighting', 'other', 'admin', 'test', 'reservation_confirmation', 'card_approved', 'card_declined', 'emergency_bus', 'trip_completion', 'topup', 'card_reserved', 'card_claimed');
 
 -- Step 3: Drop the existing constraint if it exists
 ALTER TABLE sms_queue DROP CONSTRAINT IF EXISTS sms_queue_type_check;
@@ -16,7 +16,7 @@ ALTER TABLE sms_queue DROP CONSTRAINT IF EXISTS sms_queue_type_check;
 -- Step 4: Add the updated constraint with all types
 ALTER TABLE sms_queue
 ADD CONSTRAINT sms_queue_type_check
-CHECK (type IN ('emergency', 'alighting', 'other', 'admin', 'test', 'reservation_confirmation', 'card_approved', 'card_declined', 'emergency_bus', 'trip_completion', 'topup'));
+CHECK (type IN ('emergency', 'alighting', 'other', 'admin', 'test', 'reservation_confirmation', 'card_approved', 'card_declined', 'emergency_bus', 'trip_completion', 'topup', 'card_reserved', 'card_claimed'));
 
 -- Step 5: Verify the constraint was added successfully
 SELECT constraint_name, check_clause

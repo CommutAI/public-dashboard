@@ -92,7 +92,7 @@ export async function queueCardReservationSMS(
   return queueSMS({
     phone_number: phone,
     message,
-    type: 'reservation_confirmation',
+    type: 'card_reserved',
     priority: 7
   })
 }
