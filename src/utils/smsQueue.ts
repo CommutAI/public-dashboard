@@ -108,9 +108,7 @@ export async function queueCardReservationSMS(
     phone_number: phone,
     message,
     type: 'card_reserved',
-    priority: 7,
-    requireApproval: true,
-    approvalHours: 48
+    priority: 7
   })
 }
 
