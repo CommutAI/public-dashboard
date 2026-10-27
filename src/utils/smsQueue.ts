@@ -27,7 +27,7 @@ type SMSQueueData = {
 export interface SMSQueueItem {
   phone_number: string
   message: string
-  type: 'emergency' | 'alighting' | 'other' | 'admin' | 'test' | 'reservation_confirmation' | 'card_approved' | 'card_declined' | 'emergency_bus' | 'trip_completion' | 'topup' | 'card_reserved' | 'card_claimed'
+  type: string // Allow any valid SMS type from database
   priority?: number
   related_id?: string
   trip_id?: string
