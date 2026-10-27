@@ -18,10 +18,14 @@ type SMSQueueData = {
   id: string
   phone_number: string
   message: string
-  type: string
+  sms_type: string
   priority: number
   status: string
   created_at: string
+  approved_at?: string
+  approved_by?: string
+  approval_deadline?: string
+  auto_approve_after_hours?: number
 }
 
 export interface SMSQueueItem {
@@ -204,14 +208,13 @@ export async function approveSMS(smsId: string, approvedBy: string): Promise<{ s
   }
 
   try {
-    const updateData: Record<string, any> = {
-      status: 'approved',
-      approved_at: new Date().toISOString(),
-      approved_by: approvedBy
-    }
     const { error } = await supabase
       .from('sms_queue')
-      .update(updateData)
+      .update<any>({
+        status: 'approved',
+        approved_at: new Date().toISOString(),
+        approved_by: approvedBy
+      })
       .eq('id', smsId)
 
     if (error) {
@@ -236,13 +239,12 @@ export async function cancelSMS(smsId: string, reason: string): Promise<{ succes
   }
 
   try {
-    const updateData: Record<string, any> = {
-      status: 'cancelled',
-      error_message: reason
-    }
     const { error } = await supabase
       .from('sms_queue')
-      .update(updateData)
+      .update<any>({
+        status: 'cancelled',
+        error_message: reason
+      })
       .eq('id', smsId)
 
     if (error) {
