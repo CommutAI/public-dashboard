@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import L from 'leaflet'
 import { Menu, Clock, X, Map, CreditCard, Ticket, Shield, Mail, Phone, MapPin, Lock, FileText, LogIn } from 'lucide-react'
 import { createClient } from '@supabase/supabase-js'
-import { getSMSAwaitingApproval, approveSMS, cancelSMS } from './utils/smsQueue'
+// SMS functions removed - handled by database trigger
 import 'leaflet/dist/leaflet.css'
 
 // Singleton pattern for Supabase client
@@ -176,11 +176,6 @@ function App() {
   const [showPolicyModal, setShowPolicyModal] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [successModalData, setSuccessModalData] = useState<{ reservationId: string; expirationDate: string } | null>(null)
-
-  // SMS Approval state
-  const [showSMSApproval, setShowSMSApproval] = useState(false)
-  const [awaitingSMS, setAwaitingSMS] = useState<any[]>([])
-  const [loadingSMS, setLoadingSMS] = useState(false)
   const [lastReservationTime, setLastReservationTime] = useState<number | null>(null)
   const [cooldownRemaining, setCooldownRemaining] = useState<number>(0)
   const [busStops, setBusStops] = useState<Array<{ stop: string; location: string; status: string; coordinates: [number, number] }>>(busStopsData)
@@ -952,38 +947,6 @@ function App() {
     }
   }, [])
 
-  // Fetch SMS awaiting approval
-  const fetchAwaitingSMS = async () => {
-    if (!supabase) return
-    setLoadingSMS(true)
-    const result = await getSMSAwaitingApproval()
-    if (result.success && result.data) {
-      setAwaitingSMS(result.data)
-    }
-    setLoadingSMS(false)
-  }
-
-  useEffect(() => {
-    if (showSMSApproval) {
-      fetchAwaitingSMS()
-    }
-  }, [showSMSApproval])
-
-  const handleApproveSMS = async (smsId: string) => {
-    const result = await approveSMS(smsId, 'customer_service')
-    if (result.success) {
-      fetchAwaitingSMS()
-    }
-  }
-
-  const handleCancelSMS = async (smsId: string) => {
-    const result = await cancelSMS(smsId, 'Cancelled by customer service')
-    if (result.success) {
-      fetchAwaitingSMS()
-    }
-  }
-
-
   return (
     <>
     <div className="min-h-screen bg-platform text-mist">
@@ -1003,7 +966,6 @@ function App() {
               <a href="#routes" className="hover:text-amber transition-colors">Routes</a>
               <a href="#qr-guide" className="hover:text-amber transition-colors">QR Card</a>
               <a href="#about" className="hover:text-amber transition-colors">About</a>
-              <button onClick={() => setShowSMSApproval(true)} className="hover:text-amber transition-colors">SMS Approval</button>
             </nav>
 
             <div className="flex items-center gap-3">
@@ -1029,7 +991,6 @@ function App() {
               <a href="#routes" className="hover:text-amber" onClick={() => setMobileMenuOpen(false)}>Routes</a>
               <a href="#qr-guide" className="hover:text-amber" onClick={() => setMobileMenuOpen(false)}>QR Card</a>
               <a href="#about" className="hover:text-amber" onClick={() => setMobileMenuOpen(false)}>About</a>
-              <button onClick={() => { setShowSMSApproval(true); setMobileMenuOpen(false) }} className="hover:text-amber text-left">SMS Approval</button>
             </nav>
           )}
         </div>
@@ -2108,78 +2069,6 @@ function App() {
                     Got it
                   </button>
                 </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* SMS Approval Modal */}
-        {showSMSApproval && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-signal rounded-xl max-w-4xl w-full border border-white/10 max-h-[90vh] overflow-hidden flex flex-col">
-              <div className="p-6 border-b border-white/10">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold flex items-center gap-2">
-                    <Mail className="w-5 h-5 text-amber" />
-                    SMS Approval Queue
-                  </h2>
-                  <button
-                    onClick={() => setShowSMSApproval(false)}
-                    className="text-mist/60 hover:text-mist transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-6">
-                {loadingSMS ? (
-                  <div className="text-center text-mist/60 py-8">Loading...</div>
-                ) : awaitingSMS.length === 0 ? (
-                  <div className="text-center text-mist/60 py-8">No SMS awaiting approval</div>
-                ) : (
-                  <div className="space-y-4">
-                    {awaitingSMS.map((sms) => (
-                      <div key={sms.id} className="bg-white/5 rounded-lg p-4 border border-white/10">
-                        <div className="flex justify-between items-start mb-3">
-                          <div className="flex-1">
-                            <div className="text-sm text-mist/60 mb-1">
-                              To: <span className="font-mono">{sms.phone_number}</span>
-                            </div>
-                            <div className="text-sm text-mist/60 mb-2">
-                              Type: <span className="font-semibold">{sms.sms_type}</span>
-                            </div>
-                            <div className="text-sm text-mist/60 mb-2">
-                              Created: {new Date(sms.created_at).toLocaleString()}
-                            </div>
-                            {sms.approval_deadline && (
-                              <div className="text-sm text-mist/60 mb-2">
-                                Deadline: {new Date(sms.approval_deadline).toLocaleString()}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="bg-black/20 rounded p-3 mb-3">
-                          <p className="text-sm whitespace-pre-wrap">{sms.message}</p>
-                        </div>
-                        <div className="flex gap-2 justify-end">
-                          <button
-                            onClick={() => handleCancelSMS(sms.id)}
-                            className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors text-sm font-medium"
-                          >
-                            Reject
-                          </button>
-                          <button
-                            onClick={() => handleApproveSMS(sms.id)}
-                            className="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition-colors text-sm font-medium"
-                          >
-                            Approve
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           </div>
