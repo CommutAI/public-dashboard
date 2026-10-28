@@ -10,8 +10,11 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 let supabase: ReturnType<typeof createClient> | null = null
 
-if (supabaseUrl && supabaseKey) {
-  supabase = createClient(supabaseUrl, supabaseKey)
+const getSupabase = () => {
+  if (!supabase && supabaseUrl && supabaseKey) {
+    supabase = createClient(supabaseUrl, supabaseKey)
+  }
+  return supabase
 }
 
 type SMSQueueData = {
@@ -43,7 +46,8 @@ export interface SMSQueueItem {
  * Queue SMS to Supabase for processing by Raspberry Pi
  */
 export async function queueSMS(sms: SMSQueueItem): Promise<{ success: boolean; error?: string; id?: string }> {
-  if (!supabase) {
+  const client = getSupabase()
+  if (!client) {
     return { success: false, error: 'Supabase not configured' }
   }
 
@@ -67,7 +71,7 @@ export async function queueSMS(sms: SMSQueueItem): Promise<{ success: boolean; e
       insertData.auto_approve_after_hours = approvalHours
     }
 
-    const result = await supabase
+    const result = await client
       .from('sms_queue')
       .insert(insertData)
       .select()
@@ -120,7 +124,8 @@ export async function queueEmergencySMS(
   message: string,
   location?: { lat: number; lng: number }
 ): Promise<{ success: boolean; error?: string }> {
-  if (!supabase) {
+  const client = getSupabase()
+  if (!client) {
     return { success: false, error: 'Supabase not configured' }
   }
 
@@ -171,12 +176,13 @@ export async function queueTripCompletionSMS(
  * Get SMS awaiting approval
  */
 export async function getSMSAwaitingApproval(): Promise<{ success: boolean; data?: any[]; error?: string }> {
-  if (!supabase) {
+  const client = getSupabase()
+  if (!client) {
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    const result = await supabase
+    const result = await client
       .from('sms_queue')
       .select('*')
       .eq('status', 'awaiting_approval')
@@ -201,12 +207,13 @@ export async function getSMSAwaitingApproval(): Promise<{ success: boolean; data
  * Approve an SMS
  */
 export async function approveSMS(smsId: string, approvedBy: string): Promise<{ success: boolean; error?: string }> {
-  if (!supabase) {
+  const client = getSupabase()
+  if (!client) {
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    const { error } = await (supabase.from('sms_queue') as any)
+    const { error } = await (client.from('sms_queue') as any)
       .update({
         status: 'approved',
         approved_at: new Date().toISOString(),
@@ -231,12 +238,13 @@ export async function approveSMS(smsId: string, approvedBy: string): Promise<{ s
  * Cancel/reject an SMS
  */
 export async function cancelSMS(smsId: string, reason: string): Promise<{ success: boolean; error?: string }> {
-  if (!supabase) {
+  const client = getSupabase()
+  if (!client) {
     return { success: false, error: 'Supabase not configured' }
   }
 
   try {
-    const { error } = await (supabase.from('sms_queue') as any)
+    const { error } = await (client.from('sms_queue') as any)
       .update({
         status: 'cancelled',
         error_message: reason
