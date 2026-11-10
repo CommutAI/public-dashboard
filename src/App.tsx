@@ -5,6 +5,7 @@ import { Menu, Clock, X, Map, CreditCard, Ticket, Shield, Mail, Phone, MapPin, L
 import { createClient } from '@supabase/supabase-js'
 // SMS functions removed - handled by database trigger
 import 'leaflet/dist/leaflet.css'
+import { fetchLatestGPSLocation, normalizeGPSData } from './utils/gpsApi'
 
 // Singleton pattern for Supabase client
 let supabaseInstance: ReturnType<typeof createClient> | null = null
@@ -670,59 +671,78 @@ function App() {
   useEffect(() => {
     const fetchBusGPS = async () => {
       try {
-        if (!supabase) {
-          setGpsStatus('error')
-          return
-        }
+        const backendUrl = import.meta.env.VITE_GPS_BACKEND_URL || 'https://sys-admin-my13.onrender.com'
+        
         setGpsStatus('connecting')
         setEstimatedArrival('Connecting...')
         
-        // First try to fetch from gps_locations table
-        const { data: gpsLogsData, error: logsError } = await supabase
-          .from('gps_locations')
-          .select('latitude, longitude, recorded_at, trip_id')
-          .order('recorded_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+        // Fetch GPS data from backend URL
+        const response = await fetch(`${backendUrl}/api/gps/latest`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
 
-        console.log('GPS fetch result:', { gpsLogsData, logsError })
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
 
-        let gpsData: any = gpsLogsData
-        let dataSource = 'gps_locations'
+        const gpsData = await response.json()
+        console.log('GPS fetch result from backend:', gpsData)
 
-        // If no data in gps_logs, try trips table as fallback
-        if (!gpsData) {
-          const { data: tripsData, error: tripsError } = await supabase
-            .from('trips')
-            .select('current_lat, current_lng, gps_updated_at, id')
-            .eq('status', 'in_progress')
-            .order('started_at', { ascending: false })
+        // Fallback to Supabase if backend request fails
+        let fallbackData: any = null
+        if (!gpsData || (!gpsData.latitude && !gpsData.lat)) {
+          if (!supabase) {
+            setGpsStatus('error')
+            return
+          }
+          
+          // Try to fetch from gps_locations table as fallback
+          const { data: gpsLogsData, error: logsError } = await supabase
+            .from('gps_locations')
+            .select('latitude, longitude, recorded_at, trip_id')
+            .order('recorded_at', { ascending: false })
             .limit(1)
-            .maybeSingle() as any
+            .maybeSingle()
 
-          if (tripsData && tripsData.current_lat && tripsData.current_lng) {
-            gpsData = {
-              latitude: tripsData.current_lat,
-              longitude: tripsData.current_lng,
-              recorded_at: tripsData.gps_updated_at,
-              trip_id: tripsData.id
-            } as any
-            dataSource = 'trips'
+          fallbackData = gpsLogsData
+
+          // If still no data, try trips table
+          if (!fallbackData) {
+            const { data: tripsData, error: tripsError } = await supabase
+              .from('trips')
+              .select('current_lat, current_lng, gps_updated_at, id')
+              .eq('status', 'in_progress')
+              .order('started_at', { ascending: false })
+              .limit(1)
+              .maybeSingle() as any
+
+            if (tripsData && tripsData.current_lat && tripsData.current_lng) {
+              fallbackData = {
+                latitude: tripsData.current_lat,
+                  longitude: tripsData.current_lng,
+                recorded_at: tripsData.gps_updated_at,
+                trip_id: tripsData.id
+              } as any
+            }
           }
         }
 
+        // Use backend data if available, otherwise use fallback
+        const finalGpsData = (gpsData && (gpsData.latitude || gpsData.lat)) ? gpsData : fallbackData
 
+        if (finalGpsData) {
+          const lat = parseFloat((finalGpsData as any).latitude || (finalGpsData as any).lat)
+          const lng = parseFloat((finalGpsData as any).longitude || (finalGpsData as any).lng)
 
-        if (gpsData) {
-          const lat = parseFloat((gpsData as any).latitude || (gpsData as any).lat)
-          const lng = parseFloat((gpsData as any).longitude || (gpsData as any).lng)
-
-          console.log('GPS Data received:', { lat, lng, gpsData, dataSource })
+          console.log('GPS Data received:', { lat, lng, finalGpsData, source: gpsData ? 'backend' : 'supabase' })
 
           if (Number.isFinite(lat) && Number.isFinite(lng)) {
             setBusCoordinates([lat, lng])
             setGpsStatus('active')
-            setLastGpsUpdate((gpsData as any).recorded_at)
+            setLastGpsUpdate((finalGpsData as any).recorded_at || (finalGpsData as any).timestamp || new Date().toISOString())
             console.log('Bus coordinates set:', [lat, lng])
 
             // Check if near any stop
@@ -802,7 +822,7 @@ function App() {
           }
         } else {
           // No GPS data available from any source
-          console.log('No GPS data found in database')
+          console.log('No GPS data found from backend or database')
           setGpsStatus('error')
           setBusLocationName('Schedule coming soon')
           setEstimatedArrival('Schedule check')
@@ -818,7 +838,7 @@ function App() {
     // Initial fetch
     fetchBusGPS()
 
-    // Set up real-time subscription for GPS updates from both tables
+    // Set up real-time subscription for GPS updates from both tables (as fallback)
     let gpsLogsSubscription: any = null
     let tripsSubscription: any = null
 
@@ -841,7 +861,7 @@ function App() {
         .subscribe()
     }
 
-    // Poll for updates every 10 seconds as fallback
+    // Poll for updates every 10 seconds - this will fetch from backend
     const pollingInterval = setInterval(fetchBusGPS, 10000)
 
     return () => {
