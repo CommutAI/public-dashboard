@@ -187,6 +187,7 @@ function App() {
   const [lastGpsUpdate, setLastGpsUpdate] = useState<string | null>(null)
   const [occupancyData, setOccupancyData] = useState<{ current: number; capacity: number; percentage: number } | null>(null)
   const [estimatedArrival, setEstimatedArrival] = useState<string>('Calculating...')
+  const [estimatedArrivalToSelectedStop, setEstimatedArrivalToSelectedStop] = useState<string>('Calculating...')
   const [tripSchedules, setTripSchedules] = useState<any[]>([
     {
       id: 1,
@@ -764,6 +765,21 @@ function App() {
               } else {
                 setEstimatedArrival('Arrived')
               }
+              
+              // Calculate arrival time to selected end stop
+              if (selectedEndStop !== nearestIndex) {
+                const selectedStop = busStops[selectedEndStop]
+                const distanceToSelected = Math.sqrt(
+                  Math.pow(lat - selectedStop.coordinates[0], 2) + 
+                  Math.pow(lng - selectedStop.coordinates[1], 2)
+                )
+                const distanceKmToSelected = distanceToSelected * 111
+                const averageSpeedKmh = 40
+                const timeMinutesToSelected = Math.round((distanceKmToSelected / averageSpeedKmh) * 60)
+                setEstimatedArrivalToSelectedStop(`${timeMinutesToSelected} min`)
+              } else {
+                setEstimatedArrivalToSelectedStop('At destination')
+              }
             } else {
               setBusLocationName('En route')
               
@@ -791,6 +807,17 @@ function App() {
               } else {
                 setEstimatedArrival('Schedule check')
               }
+              
+              // Calculate arrival time to selected end stop
+              const selectedStop = busStops[selectedEndStop]
+              const distanceToSelected = Math.sqrt(
+                Math.pow(lat - selectedStop.coordinates[0], 2) + 
+                Math.pow(lng - selectedStop.coordinates[1], 2)
+              )
+              const distanceKmToSelected = distanceToSelected * 111
+              const averageSpeedKmh = 40
+              const timeMinutesToSelected = Math.round((distanceKmToSelected / averageSpeedKmh) * 60)
+              setEstimatedArrivalToSelectedStop(`${timeMinutesToSelected} min`)
             }
           } else {
             setGpsStatus('error')
@@ -850,7 +877,7 @@ function App() {
       }
       clearInterval(pollingInterval)
     }
-  }, [busStops])
+  }, [busStops, selectedEndStop])
 
   // Fetch occupancy data from database
   useEffect(() => {
@@ -1237,6 +1264,11 @@ function App() {
                               <p className="font-signage font-600 text-sm">
                                 {busStops[selectedStartStop]?.location || 'N/A'} → {busStops[selectedEndStop]?.location || 'N/A'}
                               </p>
+                              {gpsStatus === 'active' && busCoordinates && (
+                                <p className="text-xs text-amber mt-1">
+                                  Est. arrival: {estimatedArrivalToSelectedStop}
+                                </p>
+                              )}
                             </div>
                             <div className="text-right">
                               <p className="text-sm text-mist/70">Fare</p>
