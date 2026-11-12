@@ -767,116 +767,57 @@ function App() {
 
             setNearbyStopIndex(nearestIndex)
             
+            // Final terminal is always the last stop — independent of fare calculator selection
+            const finalTerminal = busStops[busStops.length - 1]
+            const isAtFinalTerminal = nearestIndex === busStops.length - 1
+            
             // Set bus location name
             if (nearestIndex !== null) {
               setBusLocationName(busStops[nearestIndex]?.location || 'Bus Location')
-              
-              // Determine next stop and selected destination
-              const nextStopIndex = nearestIndex + 1
-              const hasNextStop = nextStopIndex < busStops.length
-              const nextStop = hasNextStop ? busStops[nextStopIndex] : null
-              const showSelectedArrival = selectedEndStop !== nearestIndex
-              const selectedStop = showSelectedArrival ? busStops[selectedEndStop] : null
-              
-              // Fire both OSRM calls in parallel for faster response
-              const [osrmNextMinutes, osrmSelectedMinutes] = await Promise.all([
-                nextStop ? fetchOSRMTravelTime([lat, lng], nextStop.coordinates) : Promise.resolve(null),
-                selectedStop ? fetchOSRMTravelTime([lat, lng], selectedStop.coordinates) : Promise.resolve(null)
-              ])
-              
-              // Set next stop arrival
-              if (hasNextStop && nextStop) {
-                if (osrmNextMinutes !== null) {
-                  setEstimatedArrival(`${osrmNextMinutes} min`)
-                } else {
-                  // Fallback to straight-line estimate if OSRM fails
-                  const distance = Math.sqrt(
-                    Math.pow(lat - nextStop.coordinates[0], 2) +
-                    Math.pow(lng - nextStop.coordinates[1], 2)
-                  )
-                  const distanceKm = distance * 111
-                  const timeMinutes = Math.round((distanceKm / 40) * 60)
-                  setEstimatedArrival(`${timeMinutes} min`)
-                }
-              } else {
-                setEstimatedArrival('Arrived')
-              }
-              
-              // Set selected destination arrival
-              if (showSelectedArrival && selectedStop) {
-                if (osrmSelectedMinutes !== null) {
-                  setEstimatedArrivalToSelectedStop(`${osrmSelectedMinutes} min`)
-                } else {
-                  const distanceToSelected = Math.sqrt(
-                    Math.pow(lat - selectedStop.coordinates[0], 2) +
-                    Math.pow(lng - selectedStop.coordinates[1], 2)
-                  )
-                  const distanceKmToSelected = distanceToSelected * 111
-                  const timeMinutesToSelected = Math.round((distanceKmToSelected / 40) * 60)
-                  setEstimatedArrivalToSelectedStop(`${timeMinutesToSelected} min`)
-                }
-              } else {
-                setEstimatedArrivalToSelectedStop('At destination')
-              }
             } else {
               setBusLocationName('En route')
-              
-              // Find the nearest stop to determine position on route
-              let nearestIndexForArrival = null
-              let minDistanceForArrival = Infinity
+            }
 
-              busStops.forEach((stop, index) => {
-                const distance = Math.sqrt(
-                  Math.pow(lat - stop.coordinates[0], 2) +
-                  Math.pow(lng - stop.coordinates[1], 2)
-                )
+            // Selected stop from fare calculator
+            const selectedStop = busStops[selectedEndStop]
+            const isAtSelectedStop = nearestIndex === selectedEndStop
 
-                if (distance < minDistanceForArrival) {
-                  minDistanceForArrival = distance
-                  nearestIndexForArrival = index
-                }
-              })
+            // Fire both OSRM calls in parallel:
+            // [0] = bus → final terminal (for arrival board)
+            // [1] = bus → fare calculator selected stop
+            const [osrmFinalMinutes, osrmSelectedMinutes] = await Promise.all([
+              isAtFinalTerminal
+                ? Promise.resolve(null)
+                : fetchOSRMTravelTime([lat, lng], finalTerminal.coordinates),
+              isAtSelectedStop
+                ? Promise.resolve(null)
+                : fetchOSRMTravelTime([lat, lng], selectedStop.coordinates)
+            ])
 
-              // Next stop ahead is nearestIndexForArrival + 1 (bus travels forward along route)
-              // If nearest is the last stop, next arrival is the last stop itself
-              const nextAheadIndex = (nearestIndexForArrival !== null && nearestIndexForArrival + 1 < busStops.length)
-                ? nearestIndexForArrival + 1
-                : nearestIndexForArrival
-              const nextAheadStop = nextAheadIndex !== null ? busStops[nextAheadIndex] : null
-              const selectedStop = busStops[selectedEndStop]
-              
-              // Fire both OSRM calls in parallel
-              const [osrmNextMinutes, osrmSelectedMinutes] = await Promise.all([
-                nextAheadStop ? fetchOSRMTravelTime([lat, lng], nextAheadStop.coordinates) : Promise.resolve(null),
-                fetchOSRMTravelTime([lat, lng], selectedStop.coordinates)
-              ])
-              
-              // Set next stop arrival
-              if (nextAheadStop) {
-                if (osrmNextMinutes !== null) {
-                  setEstimatedArrival(`${osrmNextMinutes} min`)
-                } else {
-                  // Fallback: use straight-line distance to nearest stop
-                  const distanceKm = minDistanceForArrival * 111
-                  const timeMinutes = Math.round((distanceKm / 40) * 60)
-                  setEstimatedArrival(`${timeMinutes} min`)
-                }
-              } else {
-                setEstimatedArrival('Schedule check')
-              }
-              
-              // Set selected destination arrival
-              if (osrmSelectedMinutes !== null) {
-                setEstimatedArrivalToSelectedStop(`${osrmSelectedMinutes} min`)
-              } else {
-                const distanceToSelected = Math.sqrt(
-                  Math.pow(lat - selectedStop.coordinates[0], 2) +
-                  Math.pow(lng - selectedStop.coordinates[1], 2)
-                )
-                const distanceKmToSelected = distanceToSelected * 111
-                const timeMinutesToSelected = Math.round((distanceKmToSelected / 40) * 60)
-                setEstimatedArrivalToSelectedStop(`${timeMinutesToSelected} min`)
-              }
+            // Arrival board: ETA to final terminal
+            if (isAtFinalTerminal) {
+              setEstimatedArrival('Arrived')
+            } else if (osrmFinalMinutes !== null) {
+              setEstimatedArrival(`${osrmFinalMinutes} min`)
+            } else {
+              const d = Math.sqrt(
+                Math.pow(lat - finalTerminal.coordinates[0], 2) +
+                Math.pow(lng - finalTerminal.coordinates[1], 2)
+              )
+              setEstimatedArrival(`${Math.round((d * 111 / 40) * 60)} min`)
+            }
+
+            // Fare calculator: ETA to selected stop
+            if (isAtSelectedStop) {
+              setEstimatedArrivalToSelectedStop('At destination')
+            } else if (osrmSelectedMinutes !== null) {
+              setEstimatedArrivalToSelectedStop(`${osrmSelectedMinutes} min`)
+            } else {
+              const d = Math.sqrt(
+                Math.pow(lat - selectedStop.coordinates[0], 2) +
+                Math.pow(lng - selectedStop.coordinates[1], 2)
+              )
+              setEstimatedArrivalToSelectedStop(`${Math.round((d * 111 / 40) * 60)} min`)
             }
           } else {
             // Invalid coordinates — keep last known location if available
@@ -1197,7 +1138,7 @@ function App() {
                       <div>
                         <p className="text-mist/80 text-sm font-medium">
                           {loadingStops ? 'Loading route...' : busStops.length > 0 
-                            ? `${busStops[selectedStartStop]?.location} → ${busStops[selectedEndStop]?.location}`
+                            ? `${busStops[0].location} → ${busStops[busStops.length - 1].location}`
                             : 'Route information unavailable'
                           }
                         </p>
@@ -1206,7 +1147,7 @@ function App() {
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-mist/50 mb-1">Next Arrival</p>
-                      <div className="flap-board flap-sm text-amber" aria-live="polite">{estimatedArrivalToSelectedStop}</div>
+                      <div className="flap-board flap-sm text-amber" aria-live="polite">{estimatedArrival}</div>
                     </div>
                   </div>
 
