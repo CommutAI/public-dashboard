@@ -1197,7 +1197,7 @@ function App() {
                       <div>
                         <p className="text-mist/80 text-sm font-medium">
                           {loadingStops ? 'Loading route...' : busStops.length > 0 
-                            ? `${busStops[0].location} → ${busStops[busStops.length - 1].location}`
+                            ? `${busStops[selectedStartStop]?.location} → ${busStops[selectedEndStop]?.location}`
                             : 'Route information unavailable'
                           }
                         </p>
@@ -1206,7 +1206,7 @@ function App() {
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-mist/50 mb-1">Next Arrival</p>
-                      <div className="flap-board flap-sm text-amber" aria-live="polite">{estimatedArrival}</div>
+                      <div className="flap-board flap-sm text-amber" aria-live="polite">{estimatedArrivalToSelectedStop}</div>
                     </div>
                   </div>
 
