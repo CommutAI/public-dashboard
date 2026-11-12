@@ -173,6 +173,7 @@ function App() {
   const [selectedStartStop, setSelectedStartStop] = useState<number>(0)
   const [selectedEndStop, setSelectedEndStop] = useState<number>(0)
   const hasActiveGpsRef = useRef(false)
+  const lastKnownGpsRef = useRef<{ lat: number; lng: number; recorded_at: string } | null>(null)
 
   // Reservation form state
   const [showReservationForm, setShowReservationForm] = useState(false)
@@ -694,8 +695,8 @@ function App() {
           return
         }
         
-        setGpsStatus('connecting')
         if (!hasActiveGpsRef.current) {
+          setGpsStatus('connecting')
           setEstimatedArrival('Connecting...')
           setEstimatedArrivalToSelectedStop('Connecting...')
         }
@@ -742,7 +743,9 @@ function App() {
             setBusCoordinates([lat, lng])
             setGpsStatus('active')
             hasActiveGpsRef.current = true
-            setLastGpsUpdate((finalGpsData as any).recorded_at || (finalGpsData as any).timestamp || new Date().toISOString())
+            const recordedAt = (finalGpsData as any).recorded_at || (finalGpsData as any).timestamp || new Date().toISOString()
+            setLastGpsUpdate(recordedAt)
+            lastKnownGpsRef.current = { lat, lng, recorded_at: recordedAt }
             console.log('Bus coordinates set:', [lat, lng])
 
             // Check if near any stop
@@ -876,28 +879,40 @@ function App() {
               }
             }
           } else {
-            setGpsStatus('error')
-            hasActiveGpsRef.current = false
-            setBusLocationName('GPS Error')
-            setEstimatedArrival('Schedule check')
-            setEstimatedArrivalToSelectedStop('Schedule check')
+            // Invalid coordinates — keep last known location if available
+            if (lastKnownGpsRef.current) {
+              console.log('Using last known GPS location (invalid new data)')
+            } else {
+              setGpsStatus('error')
+              hasActiveGpsRef.current = false
+              setBusLocationName('GPS Error')
+              setEstimatedArrival('Schedule check')
+              setEstimatedArrivalToSelectedStop('Schedule check')
+            }
           }
         } else {
           // No GPS data available from any source
-          console.log('No GPS data found from database')
+          if (lastKnownGpsRef.current) {
+            console.log('No new GPS data — keeping last known location')
+          } else {
+            console.log('No GPS data found from database')
+            setGpsStatus('error')
+            hasActiveGpsRef.current = false
+            setBusLocationName('Schedule coming soon')
+            setEstimatedArrival('Schedule check')
+            setEstimatedArrivalToSelectedStop('Schedule check')
+          }
+        }
+      } catch (error) {
+        console.error('GPS fetch error:', error)
+        // Keep last known location on error — don't clear the map
+        if (!lastKnownGpsRef.current) {
           setGpsStatus('error')
           hasActiveGpsRef.current = false
           setBusLocationName('Schedule coming soon')
           setEstimatedArrival('Schedule check')
           setEstimatedArrivalToSelectedStop('Schedule check')
         }
-      } catch (error) {
-        console.error('GPS fetch error:', error)
-        setGpsStatus('error')
-        hasActiveGpsRef.current = false
-        setBusLocationName('Schedule coming soon')
-        setEstimatedArrival('Schedule check')
-        setEstimatedArrivalToSelectedStop('Schedule check')
       }
     }
 
