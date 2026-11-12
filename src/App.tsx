@@ -270,219 +270,9 @@ function App() {
     { name: 'TEMP PWD', image: '/assets/TEMP-PWD.png', color: 'bg-red-500/20', textColor: 'text-red-400', benefit: 'Maximum discount benefits', type: 'Temporary' }
   ]
 
-  // Load complete fare matrix from proper fare metrics data
-  const fareMatrix: Record<string, Record<string, { regular: number; discounted: number }>> = {
-    'Manolo Fortich Terminal': {
-      'Gaisano CDO': { regular: 110, discounted: 100 },
-      'Gusa': { regular: 110, discounted: 100 },
-      'Tablon Baloi': { regular: 105, discounted: 95 },
-      'Tablon': { regular: 100, discounted: 90 },
-      'Agusan': { regular: 95, discounted: 85 },
-      'Puerto': { regular: 90, discounted: 80 },
-      'Bae Upper Puerto': { regular: 85, discounted: 75 },
-      'Alae': { regular: 65, discounted: 55 },
-      'Lunocan': { regular: 60, discounted: 50 },
-      'San Miguel': { regular: 55, discounted: 45 },
-      'Dicklum': { regular: 50, discounted: 40 },
-      'Tankulan': { regular: 35, discounted: 25 },
-      'Agora Terminal': { regular: 110, discounted: 100 }
-    },
-    'Gaisano CDO': {
-      'Manolo Fortich Terminal': { regular: 110, discounted: 100 },
-      'Gusa': { regular: 15, discounted: 15 },
-      'Tablon Baloi': { regular: 25, discounted: 20 },
-      'Tablon': { regular: 25, discounted: 20 },
-      'Agusan': { regular: 30, discounted: 20 },
-      'Puerto': { regular: 30, discounted: 25 },
-      'Bae Upper Puerto': { regular: 45, discounted: 25 },
-      'Alae': { regular: 55, discounted: 45 },
-      'Lunocan': { regular: 65, discounted: 55 },
-      'San Miguel': { regular: 65, discounted: 55 },
-      'Dicklum': { regular: 75, discounted: 65 },
-      'Tankulan': { regular: 75, discounted: 65 },
-      'Agora Terminal': { regular: 15, discounted: 15 }
-    },
-    'Gusa': {
-      'Manolo Fortich Terminal': { regular: 110, discounted: 100 },
-      'Gaisano CDO': { regular: 15, discounted: 15 },
-      'Tablon Baloi': { regular: 15, discounted: 15 },
-      'Tablon': { regular: 15, discounted: 15 },
-      'Agusan': { regular: 20, discounted: 15 },
-      'Puerto': { regular: 23, discounted: 20 },
-      'Bae Upper Puerto': { regular: 35, discounted: 30 },
-      'Alae': { regular: 52, discounted: 45 },
-      'Lunocan': { regular: 55, discounted: 55 },
-      'San Miguel': { regular: 65, discounted: 55 },
-      'Dicklum': { regular: 75, discounted: 65 },
-      'Tankulan': { regular: 75, discounted: 65 },
-      'Agora Terminal': { regular: 15, discounted: 15 }
-    },
-    'Tablon Baloi': {
-      'Manolo Fortich Terminal': { regular: 105, discounted: 95 },
-      'Gaisano CDO': { regular: 25, discounted: 20 },
-      'Gusa': { regular: 15, discounted: 15 },
-      'Tablon': { regular: 15, discounted: 15 },
-      'Agusan': { regular: 15, discounted: 15 },
-      'Puerto': { regular: 15, discounted: 15 },
-      'Bae Upper Puerto': { regular: 25, discounted: 20 },
-      'Alae': { regular: 40, discounted: 30 },
-      'Lunocan': { regular: 50, discounted: 40 },
-      'San Miguel': { regular: 55, discounted: 45 },
-      'Dicklum': { regular: 60, discounted: 50 },
-      'Tankulan': { regular: 70, discounted: 50 },
-      'Agora Terminal': { regular: 25, discounted: 20 }
-    },
-    'Tablon': {
-      'Manolo Fortich Terminal': { regular: 100, discounted: 90 },
-      'Gaisano CDO': { regular: 25, discounted: 20 },
-      'Gusa': { regular: 15, discounted: 15 },
-      'Tablon Baloi': { regular: 15, discounted: 15 },
-      'Agusan': { regular: 15, discounted: 15 },
-      'Puerto': { regular: 15, discounted: 15 },
-      'Bae Upper Puerto': { regular: 24, discounted: 20 },
-      'Alae': { regular: 40, discounted: 35 },
-      'Lunocan': { regular: 45, discounted: 40 },
-      'San Miguel': { regular: 55, discounted: 45 },
-      'Dicklum': { regular: 60, discounted: 50 },
-      'Tankulan': { regular: 63, discounted: 50 },
-      'Agora Terminal': { regular: 25, discounted: 20 }
-    },
-    'Agusan': {
-      'Manolo Fortich Terminal': { regular: 95, discounted: 85 },
-      'Gaisano CDO': { regular: 30, discounted: 20 },
-      'Gusa': { regular: 20, discounted: 15 },
-      'Tablon Baloi': { regular: 15, discounted: 15 },
-      'Tablon': { regular: 15, discounted: 15 },
-      'Puerto': { regular: 15, discounted: 15 },
-      'Bae Upper Puerto': { regular: 20, discounted: 15 },
-      'Alae': { regular: 35, discounted: 25 },
-      'Lunocan': { regular: 40, discounted: 35 },
-      'San Miguel': { regular: 50, discounted: 40 },
-      'Dicklum': { regular: 55, discounted: 45 },
-      'Tankulan': { regular: 58, discounted: 45 },
-      'Agora Terminal': { regular: 30, discounted: 20 }
-    },
-    'Puerto': {
-      'Manolo Fortich Terminal': { regular: 90, discounted: 80 },
-      'Gaisano CDO': { regular: 30, discounted: 25 },
-      'Gusa': { regular: 23, discounted: 20 },
-      'Tablon Baloi': { regular: 15, discounted: 15 },
-      'Tablon': { regular: 15, discounted: 15 },
-      'Agusan': { regular: 15, discounted: 15 },
-      'Bae Upper Puerto': { regular: 20, discounted: 15 },
-      'Alae': { regular: 30, discounted: 25 },
-      'Lunocan': { regular: 40, discounted: 35 },
-      'San Miguel': { regular: 45, discounted: 35 },
-      'Dicklum': { regular: 55, discounted: 45 },
-      'Tankulan': { regular: 55, discounted: 45 },
-      'Agora Terminal': { regular: 30, discounted: 25 }
-    },
-    'Bae Upper Puerto': {
-      'Manolo Fortich Terminal': { regular: 85, discounted: 75 },
-      'Gaisano CDO': { regular: 45, discounted: 25 },
-      'Gusa': { regular: 35, discounted: 30 },
-      'Tablon Baloi': { regular: 25, discounted: 20 },
-      'Tablon': { regular: 24, discounted: 20 },
-      'Agusan': { regular: 20, discounted: 15 },
-      'Puerto': { regular: 20, discounted: 15 },
-      'Alae': { regular: 25, discounted: 20 },
-      'Lunocan': { regular: 30, discounted: 25 },
-      'San Miguel': { regular: 35, discounted: 30 },
-      'Dicklum': { regular: 40, discounted: 30 },
-      'Tankulan': { regular: 40, discounted: 30 },
-      'Agora Terminal': { regular: 45, discounted: 25 }
-    },
-    'Alae': {
-      'Manolo Fortich Terminal': { regular: 65, discounted: 55 },
-      'Gaisano CDO': { regular: 55, discounted: 45 },
-      'Gusa': { regular: 52, discounted: 45 },
-      'Tablon Baloi': { regular: 40, discounted: 30 },
-      'Tablon': { regular: 40, discounted: 35 },
-      'Agusan': { regular: 35, discounted: 25 },
-      'Puerto': { regular: 30, discounted: 25 },
-      'Bae Upper Puerto': { regular: 25, discounted: 20 },
-      'Lunocan': { regular: 15, discounted: 15 },
-      'San Miguel': { regular: 20, discounted: 15 },
-      'Dicklum': { regular: 30, discounted: 20 },
-      'Tankulan': { regular: 30, discounted: 20 },
-      'Agora Terminal': { regular: 55, discounted: 45 }
-    },
-    'Lunocan': {
-      'Manolo Fortich Terminal': { regular: 60, discounted: 50 },
-      'Gaisano CDO': { regular: 65, discounted: 55 },
-      'Gusa': { regular: 55, discounted: 55 },
-      'Tablon Baloi': { regular: 50, discounted: 40 },
-      'Tablon': { regular: 45, discounted: 40 },
-      'Agusan': { regular: 40, discounted: 35 },
-      'Puerto': { regular: 40, discounted: 35 },
-      'Bae Upper Puerto': { regular: 30, discounted: 25 },
-      'Alae': { regular: 15, discounted: 15 },
-      'San Miguel': { regular: 20, discounted: 15 },
-      'Dicklum': { regular: 20, discounted: 20 },
-      'Tankulan': { regular: 25, discounted: 20 },
-      'Agora Terminal': { regular: 65, discounted: 55 }
-    },
-    'San Miguel': {
-      'Manolo Fortich Terminal': { regular: 55, discounted: 45 },
-      'Gaisano CDO': { regular: 65, discounted: 55 },
-      'Gusa': { regular: 65, discounted: 55 },
-      'Tablon Baloi': { regular: 55, discounted: 45 },
-      'Tablon': { regular: 55, discounted: 45 },
-      'Agusan': { regular: 50, discounted: 40 },
-      'Puerto': { regular: 45, discounted: 35 },
-      'Bae Upper Puerto': { regular: 35, discounted: 30 },
-      'Alae': { regular: 20, discounted: 15 },
-      'Lunocan': { regular: 20, discounted: 15 },
-      'Dicklum': { regular: 15, discounted: 15 },
-      'Tankulan': { regular: 20, discounted: 15 },
-      'Agora Terminal': { regular: 65, discounted: 55 }
-    },
-    'Dicklum': {
-      'Manolo Fortich Terminal': { regular: 50, discounted: 40 },
-      'Gaisano CDO': { regular: 75, discounted: 65 },
-      'Gusa': { regular: 75, discounted: 65 },
-      'Tablon Baloi': { regular: 60, discounted: 50 },
-      'Tablon': { regular: 60, discounted: 50 },
-      'Agusan': { regular: 55, discounted: 45 },
-      'Puerto': { regular: 55, discounted: 45 },
-      'Bae Upper Puerto': { regular: 40, discounted: 30 },
-      'Alae': { regular: 30, discounted: 20 },
-      'Lunocan': { regular: 20, discounted: 20 },
-      'San Miguel': { regular: 15, discounted: 15 },
-      'Tankulan': { regular: 15, discounted: 15 },
-      'Agora Terminal': { regular: 75, discounted: 65 }
-    },
-    'Tankulan': {
-      'Manolo Fortich Terminal': { regular: 35, discounted: 25 },
-      'Gaisano CDO': { regular: 75, discounted: 65 },
-      'Gusa': { regular: 75, discounted: 65 },
-      'Tablon Baloi': { regular: 70, discounted: 50 },
-      'Tablon': { regular: 63, discounted: 50 },
-      'Agusan': { regular: 58, discounted: 45 },
-      'Puerto': { regular: 55, discounted: 45 },
-      'Bae Upper Puerto': { regular: 40, discounted: 30 },
-      'Alae': { regular: 30, discounted: 20 },
-      'Lunocan': { regular: 25, discounted: 20 },
-      'San Miguel': { regular: 20, discounted: 15 },
-      'Dicklum': { regular: 15, discounted: 15 },
-      'Agora Terminal': { regular: 75, discounted: 65 }
-    },
-    'Agora Terminal': {
-      'Manolo Fortich Terminal': { regular: 110, discounted: 100 },
-      'Gaisano CDO': { regular: 15, discounted: 15 },
-      'Gusa': { regular: 15, discounted: 15 },
-      'Tablon Baloi': { regular: 25, discounted: 20 },
-      'Tablon': { regular: 25, discounted: 20 },
-      'Agusan': { regular: 30, discounted: 20 },
-      'Puerto': { regular: 30, discounted: 25 },
-      'Bae Upper Puerto': { regular: 45, discounted: 25 },
-      'Alae': { regular: 55, discounted: 45 },
-      'Lunocan': { regular: 65, discounted: 55 },
-      'San Miguel': { regular: 65, discounted: 55 },
-      'Dicklum': { regular: 75, discounted: 65 },
-      'Tankulan': { regular: 75, discounted: 65 }
-    }
-  }
+  // Fare matrix fetched from Supabase
+  const [fareMatrix, setFareMatrix] = useState<Record<string, Record<string, { regular: number; discounted: number }>>>({})
+  const [loadingFares, setLoadingFares] = useState(true)
 
   // Calculate fare between two stops using the fare matrix
   const calculateFare = (startIndex: number, endIndex: number) => {
@@ -511,6 +301,44 @@ function App() {
       discounted: estimatedDiscounted 
     }
   }
+
+  // Fetch fare matrix from Supabase
+  useEffect(() => {
+    const fetchFareMatrix = async () => {
+      if (!supabase) return
+      setLoadingFares(true)
+      try {
+        const { data, error } = await supabase
+          .from('fare_matrix')
+          .select('route_from, route_to, regular_fare, discounted_fare')
+
+        if (error || !data) {
+          console.error('Failed to fetch fare matrix:', error)
+          return
+        }
+
+        // Build nested lookup: matrix[from][to] = { regular, discounted }
+        const matrix: Record<string, Record<string, { regular: number; discounted: number }>> = {}
+        data.forEach((row: any) => {
+          const from = row.route_from?.trim()
+          const to = row.route_to?.trim()
+          const regular = parseFloat(row.regular_fare)
+          const discounted = parseFloat(row.discounted_fare)
+          if (!from || !to || isNaN(regular) || isNaN(discounted)) return
+          if (!matrix[from]) matrix[from] = {}
+          matrix[from][to] = { regular, discounted }
+        })
+
+        setFareMatrix(matrix)
+      } catch (err) {
+        console.error('Error fetching fare matrix:', err)
+      } finally {
+        setLoadingFares(false)
+      }
+    }
+
+    fetchFareMatrix()
+  }, [supabase])
 
   // Handle reservation form submission
   const handleReservationSubmit = async (e: React.FormEvent) => {
@@ -1290,10 +1118,16 @@ function App() {
                             </div>
                             <div className="text-right">
                               <p className="text-sm text-mist/70">Fare</p>
-                              <p className="font-signage font-700 text-2xl text-amber">
-                                ₱{fare.regular.toFixed(2)}
-                              </p>
-                              <p className="text-xs text-mist/50">Discounted: ₱{fare.discounted.toFixed(2)}</p>
+                              {loadingFares ? (
+                                <p className="text-sm text-mist/50 mt-1">Loading...</p>
+                              ) : (
+                                <>
+                                  <p className="font-signage font-700 text-2xl text-amber">
+                                    ₱{fare.regular.toFixed(2)}
+                                  </p>
+                                  <p className="text-xs text-mist/50">Discounted: ₱{fare.discounted.toFixed(2)}</p>
+                                </>
+                              )}
                             </div>
                           </div>
 
