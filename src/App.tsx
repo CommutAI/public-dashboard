@@ -399,6 +399,18 @@ function App() {
         return
       }
 
+      // Log to audit_logs
+      await supabase
+        .from('audit_logs')
+        .insert({
+          username: 'public',
+          action: 'CREATE',
+          module: 'Card Management',
+          details: `Public Dashboard: Card reservation ${reservationId} submitted by ${reservationData.name} (${reservationData.contact}) for card type: ${reservationData.cardType}, pickup terminal: ${reservationData.terminal}`,
+          ip_address: null,
+          created_at: new Date().toISOString()
+        } as any)
+
       // SMS is sent automatically by database trigger
 
       setReservationData({
