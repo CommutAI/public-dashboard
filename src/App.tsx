@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { Menu, Clock, X, Map, CreditCard, Ticket, Shield, Mail, Phone, MapPin, Lock, FileText, LogIn } from 'lucide-react'
@@ -172,6 +172,7 @@ function App() {
   const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([])
   const [selectedStartStop, setSelectedStartStop] = useState<number>(0)
   const [selectedEndStop, setSelectedEndStop] = useState<number>(0)
+  const hasActiveGpsRef = useRef(false)
 
   // Reservation form state
   const [showReservationForm, setShowReservationForm] = useState(false)
@@ -694,7 +695,10 @@ function App() {
         }
         
         setGpsStatus('connecting')
-        setEstimatedArrival('Connecting...')
+        if (!hasActiveGpsRef.current) {
+          setEstimatedArrival('Connecting...')
+          setEstimatedArrivalToSelectedStop('Connecting...')
+        }
         
         // Fetch GPS data from gps_locations table (no trip requirement)
         const { data: gpsLogsData, error: logsError } = await supabase
@@ -737,6 +741,7 @@ function App() {
           if (Number.isFinite(lat) && Number.isFinite(lng)) {
             setBusCoordinates([lat, lng])
             setGpsStatus('active')
+            hasActiveGpsRef.current = true
             setLastGpsUpdate((finalGpsData as any).recorded_at || (finalGpsData as any).timestamp || new Date().toISOString())
             console.log('Bus coordinates set:', [lat, lng])
 
@@ -763,13 +768,23 @@ function App() {
             if (nearestIndex !== null) {
               setBusLocationName(busStops[nearestIndex]?.location || 'Bus Location')
               
-              // Calculate estimated arrival time to next stop via OSRM road routing
+              // Determine next stop and selected destination
               const nextStopIndex = nearestIndex + 1
-              if (nextStopIndex < busStops.length) {
-                const nextStop = busStops[nextStopIndex]
-                const osrmMinutes = await fetchOSRMTravelTime([lat, lng], nextStop.coordinates)
-                if (osrmMinutes !== null) {
-                  setEstimatedArrival(`${osrmMinutes} min`)
+              const hasNextStop = nextStopIndex < busStops.length
+              const nextStop = hasNextStop ? busStops[nextStopIndex] : null
+              const showSelectedArrival = selectedEndStop !== nearestIndex
+              const selectedStop = showSelectedArrival ? busStops[selectedEndStop] : null
+              
+              // Fire both OSRM calls in parallel for faster response
+              const [osrmNextMinutes, osrmSelectedMinutes] = await Promise.all([
+                nextStop ? fetchOSRMTravelTime([lat, lng], nextStop.coordinates) : Promise.resolve(null),
+                selectedStop ? fetchOSRMTravelTime([lat, lng], selectedStop.coordinates) : Promise.resolve(null)
+              ])
+              
+              // Set next stop arrival
+              if (hasNextStop && nextStop) {
+                if (osrmNextMinutes !== null) {
+                  setEstimatedArrival(`${osrmNextMinutes} min`)
                 } else {
                   // Fallback to straight-line estimate if OSRM fails
                   const distance = Math.sqrt(
@@ -784,12 +799,10 @@ function App() {
                 setEstimatedArrival('Arrived')
               }
               
-              // Calculate arrival time to selected end stop via OSRM road routing
-              if (selectedEndStop !== nearestIndex) {
-                const selectedStop = busStops[selectedEndStop]
-                const osrmMinutesSelected = await fetchOSRMTravelTime([lat, lng], selectedStop.coordinates)
-                if (osrmMinutesSelected !== null) {
-                  setEstimatedArrivalToSelectedStop(`${osrmMinutesSelected} min`)
+              // Set selected destination arrival
+              if (showSelectedArrival && selectedStop) {
+                if (osrmSelectedMinutes !== null) {
+                  setEstimatedArrivalToSelectedStop(`${osrmSelectedMinutes} min`)
                 } else {
                   const distanceToSelected = Math.sqrt(
                     Math.pow(lat - selectedStop.coordinates[0], 2) +
@@ -805,7 +818,7 @@ function App() {
             } else {
               setBusLocationName('En route')
               
-              // Find the nearest stop for arrival estimation
+              // Find the nearest stop to determine position on route
               let nearestIndexForArrival = null
               let minDistanceForArrival = Infinity
 
@@ -821,12 +834,26 @@ function App() {
                 }
               })
 
-              if (nearestIndexForArrival !== null) {
-                const nearestStop = busStops[nearestIndexForArrival]
-                const osrmMinutes = await fetchOSRMTravelTime([lat, lng], nearestStop.coordinates)
-                if (osrmMinutes !== null) {
-                  setEstimatedArrival(`${osrmMinutes} min`)
+              // Next stop ahead is nearestIndexForArrival + 1 (bus travels forward along route)
+              // If nearest is the last stop, next arrival is the last stop itself
+              const nextAheadIndex = (nearestIndexForArrival !== null && nearestIndexForArrival + 1 < busStops.length)
+                ? nearestIndexForArrival + 1
+                : nearestIndexForArrival
+              const nextAheadStop = nextAheadIndex !== null ? busStops[nextAheadIndex] : null
+              const selectedStop = busStops[selectedEndStop]
+              
+              // Fire both OSRM calls in parallel
+              const [osrmNextMinutes, osrmSelectedMinutes] = await Promise.all([
+                nextAheadStop ? fetchOSRMTravelTime([lat, lng], nextAheadStop.coordinates) : Promise.resolve(null),
+                fetchOSRMTravelTime([lat, lng], selectedStop.coordinates)
+              ])
+              
+              // Set next stop arrival
+              if (nextAheadStop) {
+                if (osrmNextMinutes !== null) {
+                  setEstimatedArrival(`${osrmNextMinutes} min`)
                 } else {
+                  // Fallback: use straight-line distance to nearest stop
                   const distanceKm = minDistanceForArrival * 111
                   const timeMinutes = Math.round((distanceKm / 40) * 60)
                   setEstimatedArrival(`${timeMinutes} min`)
@@ -835,11 +862,9 @@ function App() {
                 setEstimatedArrival('Schedule check')
               }
               
-              // Calculate arrival time to selected end stop via OSRM road routing
-              const selectedStop = busStops[selectedEndStop]
-              const osrmMinutesSelected = await fetchOSRMTravelTime([lat, lng], selectedStop.coordinates)
-              if (osrmMinutesSelected !== null) {
-                setEstimatedArrivalToSelectedStop(`${osrmMinutesSelected} min`)
+              // Set selected destination arrival
+              if (osrmSelectedMinutes !== null) {
+                setEstimatedArrivalToSelectedStop(`${osrmSelectedMinutes} min`)
               } else {
                 const distanceToSelected = Math.sqrt(
                   Math.pow(lat - selectedStop.coordinates[0], 2) +
@@ -852,21 +877,27 @@ function App() {
             }
           } else {
             setGpsStatus('error')
+            hasActiveGpsRef.current = false
             setBusLocationName('GPS Error')
             setEstimatedArrival('Schedule check')
+            setEstimatedArrivalToSelectedStop('Schedule check')
           }
         } else {
           // No GPS data available from any source
           console.log('No GPS data found from database')
           setGpsStatus('error')
+          hasActiveGpsRef.current = false
           setBusLocationName('Schedule coming soon')
           setEstimatedArrival('Schedule check')
+          setEstimatedArrivalToSelectedStop('Schedule check')
         }
       } catch (error) {
         console.error('GPS fetch error:', error)
         setGpsStatus('error')
+        hasActiveGpsRef.current = false
         setBusLocationName('Schedule coming soon')
         setEstimatedArrival('Schedule check')
+        setEstimatedArrivalToSelectedStop('Schedule check')
       }
     }
 
