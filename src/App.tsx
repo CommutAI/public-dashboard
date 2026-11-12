@@ -131,6 +131,23 @@ if (!document.getElementById('leaflet-style-override')) {
   document.head.appendChild(style)
 }
 
+// Fetch road-based travel time (minutes) between two points using OSRM
+const fetchOSRMTravelTime = async (origin: [number, number], destination: [number, number]): Promise<number | null> => {
+  try {
+    const response = await fetch(
+      `https://router.project-osrm.org/route/v1/driving/${origin[1]},${origin[0]};${destination[1]},${destination[0]}?overview=false`
+    )
+    const data = await response.json()
+    if (data.routes && data.routes[0] && typeof data.routes[0].duration === 'number') {
+      // OSRM duration is in seconds — convert to minutes
+      return Math.max(1, Math.round(data.routes[0].duration / 60))
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 const MapRouteFitter = ({ coordinates, busStops }: { coordinates: [number, number][], busStops: Array<{ coordinates: [number, number] }> }) => {
   const map = useMap()
   
@@ -746,37 +763,42 @@ function App() {
             if (nearestIndex !== null) {
               setBusLocationName(busStops[nearestIndex]?.location || 'Bus Location')
               
-              // Calculate estimated arrival time to next stop
+              // Calculate estimated arrival time to next stop via OSRM road routing
               const nextStopIndex = nearestIndex + 1
               if (nextStopIndex < busStops.length) {
                 const nextStop = busStops[nextStopIndex]
-                const distance = Math.sqrt(
-                  Math.pow(lat - nextStop.coordinates[0], 2) + 
-                  Math.pow(lng - nextStop.coordinates[1], 2)
-                )
-                
-                // Assume average speed of 40 km/h (approximately 0.011 degrees per minute)
-                // Distance in degrees * (111 km per degree) / 40 km/h * 60 minutes
-                const distanceKm = distance * 111
-                const averageSpeedKmh = 40
-                const timeMinutes = Math.round((distanceKm / averageSpeedKmh) * 60)
-                
-                setEstimatedArrival(`${timeMinutes} min`)
+                const osrmMinutes = await fetchOSRMTravelTime([lat, lng], nextStop.coordinates)
+                if (osrmMinutes !== null) {
+                  setEstimatedArrival(`${osrmMinutes} min`)
+                } else {
+                  // Fallback to straight-line estimate if OSRM fails
+                  const distance = Math.sqrt(
+                    Math.pow(lat - nextStop.coordinates[0], 2) +
+                    Math.pow(lng - nextStop.coordinates[1], 2)
+                  )
+                  const distanceKm = distance * 111
+                  const timeMinutes = Math.round((distanceKm / 40) * 60)
+                  setEstimatedArrival(`${timeMinutes} min`)
+                }
               } else {
                 setEstimatedArrival('Arrived')
               }
               
-              // Calculate arrival time to selected end stop
+              // Calculate arrival time to selected end stop via OSRM road routing
               if (selectedEndStop !== nearestIndex) {
                 const selectedStop = busStops[selectedEndStop]
-                const distanceToSelected = Math.sqrt(
-                  Math.pow(lat - selectedStop.coordinates[0], 2) + 
-                  Math.pow(lng - selectedStop.coordinates[1], 2)
-                )
-                const distanceKmToSelected = distanceToSelected * 111
-                const averageSpeedKmh = 40
-                const timeMinutesToSelected = Math.round((distanceKmToSelected / averageSpeedKmh) * 60)
-                setEstimatedArrivalToSelectedStop(`${timeMinutesToSelected} min`)
+                const osrmMinutesSelected = await fetchOSRMTravelTime([lat, lng], selectedStop.coordinates)
+                if (osrmMinutesSelected !== null) {
+                  setEstimatedArrivalToSelectedStop(`${osrmMinutesSelected} min`)
+                } else {
+                  const distanceToSelected = Math.sqrt(
+                    Math.pow(lat - selectedStop.coordinates[0], 2) +
+                    Math.pow(lng - selectedStop.coordinates[1], 2)
+                  )
+                  const distanceKmToSelected = distanceToSelected * 111
+                  const timeMinutesToSelected = Math.round((distanceKmToSelected / 40) * 60)
+                  setEstimatedArrivalToSelectedStop(`${timeMinutesToSelected} min`)
+                }
               } else {
                 setEstimatedArrivalToSelectedStop('At destination')
               }
@@ -789,7 +811,7 @@ function App() {
 
               busStops.forEach((stop, index) => {
                 const distance = Math.sqrt(
-                  Math.pow(lat - stop.coordinates[0], 2) + 
+                  Math.pow(lat - stop.coordinates[0], 2) +
                   Math.pow(lng - stop.coordinates[1], 2)
                 )
 
@@ -800,24 +822,33 @@ function App() {
               })
 
               if (nearestIndexForArrival !== null) {
-                const distanceKm = minDistanceForArrival * 111
-                const averageSpeedKmh = 40
-                const timeMinutes = Math.round((distanceKm / averageSpeedKmh) * 60)
-                setEstimatedArrival(`${timeMinutes} min`)
+                const nearestStop = busStops[nearestIndexForArrival]
+                const osrmMinutes = await fetchOSRMTravelTime([lat, lng], nearestStop.coordinates)
+                if (osrmMinutes !== null) {
+                  setEstimatedArrival(`${osrmMinutes} min`)
+                } else {
+                  const distanceKm = minDistanceForArrival * 111
+                  const timeMinutes = Math.round((distanceKm / 40) * 60)
+                  setEstimatedArrival(`${timeMinutes} min`)
+                }
               } else {
                 setEstimatedArrival('Schedule check')
               }
               
-              // Calculate arrival time to selected end stop
+              // Calculate arrival time to selected end stop via OSRM road routing
               const selectedStop = busStops[selectedEndStop]
-              const distanceToSelected = Math.sqrt(
-                Math.pow(lat - selectedStop.coordinates[0], 2) + 
-                Math.pow(lng - selectedStop.coordinates[1], 2)
-              )
-              const distanceKmToSelected = distanceToSelected * 111
-              const averageSpeedKmh = 40
-              const timeMinutesToSelected = Math.round((distanceKmToSelected / averageSpeedKmh) * 60)
-              setEstimatedArrivalToSelectedStop(`${timeMinutesToSelected} min`)
+              const osrmMinutesSelected = await fetchOSRMTravelTime([lat, lng], selectedStop.coordinates)
+              if (osrmMinutesSelected !== null) {
+                setEstimatedArrivalToSelectedStop(`${osrmMinutesSelected} min`)
+              } else {
+                const distanceToSelected = Math.sqrt(
+                  Math.pow(lat - selectedStop.coordinates[0], 2) +
+                  Math.pow(lng - selectedStop.coordinates[1], 2)
+                )
+                const distanceKmToSelected = distanceToSelected * 111
+                const timeMinutesToSelected = Math.round((distanceKmToSelected / 40) * 60)
+                setEstimatedArrivalToSelectedStop(`${timeMinutesToSelected} min`)
+              }
             }
           } else {
             setGpsStatus('error')
