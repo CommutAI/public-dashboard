@@ -14,6 +14,13 @@ export interface GPSLocation {
   trip_id?: string
   speed?: number
   heading?: number
+  source?: string
+}
+
+export const isFallbackSource = (source?: string | null): boolean => {
+  if (!source) return true
+  const lower = String(source).toLowerCase()
+  return lower.includes('anchor') || lower.includes('fallback') || lower.includes('terminal')
 }
 
 /**

@@ -148,6 +148,12 @@ const fetchOSRMTravelTime = async (origin: [number, number], destination: [numbe
   }
 }
 
+const isFallbackSource = (source?: string | null): boolean => {
+  if (!source) return true;
+  const lower = String(source).toLowerCase();
+  return lower.includes('anchor') || lower.includes('fallback') || lower.includes('terminal');
+};
+
 const MapRouteFitter = ({ coordinates, busStops }: { coordinates: [number, number][], busStops: Array<{ coordinates: [number, number] }> }) => {
   const map = useMap()
   
@@ -200,6 +206,9 @@ function App() {
   const [busStops, setBusStops] = useState<Array<{ stop: string; location: string; status: string; coordinates: [number, number] }>>(busStopsData)
   const [loadingStops, setLoadingStops] = useState(true)
   const [busCoordinates, setBusCoordinates] = useState<[number, number] | null>(null)
+  const [busLocation, setBusLocation] = useState<[number, number] | null>(null)
+  const [gpsSource, setGpsSource] = useState<string>('terminal_default')
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [nearbyStopIndex, setNearbyStopIndex] = useState<number | null>(null)
   const [busLocationName, setBusLocationName] = useState<string>('Bus Location')
   const [gpsStatus, setGpsStatus] = useState<'connecting' | 'active' | 'error'>('connecting')
@@ -530,194 +539,203 @@ function App() {
   useEffect(() => {
     const fetchBusGPS = async () => {
       try {
-        if (!supabase) {
-          setGpsStatus('error')
-          return
-        }
-        
+        const supabase = getSupabaseClient()
+        if (!supabase) return
+
         if (!hasActiveGpsRef.current) {
           setGpsStatus('connecting')
           setEstimatedArrival('Connecting...')
           setEstimatedArrivalToSelectedStop('Connecting...')
         }
-        
-        // Fetch GPS data from gps_locations table (no trip requirement)
-        const { data: gpsLogsData, error: logsError } = await supabase
+
+        // 1. Fetch active trip coordinates (Driver app updates current_lat & current_lng live)
+        const { data: activeTrip } = await (supabase
+          .from('trips')
+          .select('id, bus_id, current_lat, current_lng, gps_updated_at, status')
+          .eq('status', 'in_progress')
+          .order('started_at', { ascending: false })
+          .maybeSingle() as any)
+
+        // 2. Fetch recent GPS location rows including 'source'
+        const { data: gpsRows } = await supabase
           .from('gps_locations')
-          .select('latitude, longitude, recorded_at, trip_id')
+          .select('latitude, longitude, source, recorded_at, trip_id')
           .order('recorded_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+          .limit(15)
 
-        console.log('GPS fetch result from gps_locations:', { gpsLogsData, logsError })
+        // 3. Find the latest real GPS fix (ignoring terminal anchors & fallbacks)
+        let latestRealGps: any = null
+        let latestRealGpsForTrip: any = null
 
-        let finalGpsData: any = gpsLogsData
+        ;(gpsRows || []).forEach((row: any) => {
+          const lat = parseFloat(row.latitude)
+          const lng = parseFloat(row.longitude)
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+          if (Math.abs(lat) < 0.001 && Math.abs(lng) < 0.001) return
+          if (isFallbackSource(row.source)) return
 
-        // If no data in gps_locations, try trips table as fallback
-        if (!finalGpsData) {
-          const { data: tripsData, error: tripsError } = await supabase
-            .from('trips')
-            .select('current_lat, current_lng, gps_updated_at, id')
-            .eq('status', 'in_progress')
-            .order('started_at', { ascending: false })
-            .limit(1)
-            .maybeSingle() as any
-
-          if (tripsData && tripsData.current_lat && tripsData.current_lng) {
-            finalGpsData = {
-              latitude: tripsData.current_lat,
-              longitude: tripsData.current_lng,
-              recorded_at: tripsData.gps_updated_at,
-              trip_id: tripsData.id
-            } as any
+          const gps = {
+            latitude: lat,
+            longitude: lng,
+            source: row.source || 'driver_phone_gps',
+            recorded_at: row.recorded_at,
+            trip_id: row.trip_id
           }
-        }
 
-        if (finalGpsData) {
-          const lat = parseFloat((finalGpsData as any).latitude || (finalGpsData as any).lat)
-          const lng = parseFloat((finalGpsData as any).longitude || (finalGpsData as any).lng)
-
-          console.log('GPS Data received:', { lat, lng, finalGpsData, source: 'supabase' })
-
-          if (Number.isFinite(lat) && Number.isFinite(lng)) {
-            setBusCoordinates([lat, lng])
-            setGpsStatus('active')
-            hasActiveGpsRef.current = true
-            const recordedAt = (finalGpsData as any).recorded_at || (finalGpsData as any).timestamp || new Date().toISOString()
-            setLastGpsUpdate(recordedAt)
-            lastKnownGpsRef.current = { lat, lng, recorded_at: recordedAt }
-            console.log('Bus coordinates set:', [lat, lng])
-
-            // Check if near any stop
-            let nearestIndex = null
-            let minDistance = Infinity
-
-            busStops.forEach((stop, index) => {
-              const distance = Math.sqrt(
-                Math.pow(lat - stop.coordinates[0], 2) + 
-                Math.pow(lng - stop.coordinates[1], 2)
-              )
-
-              // Consider "near" if within 0.01 degrees (approximately 1km)
-              if (distance < 0.01 && distance < minDistance) {
-                minDistance = distance
-                nearestIndex = index
-              }
-            })
-
-            setNearbyStopIndex(nearestIndex)
-            
-            // Final terminal is always the last stop — independent of fare calculator selection
-            const finalTerminal = busStops[busStops.length - 1]
-            const isAtFinalTerminal = nearestIndex === busStops.length - 1
-            
-            // Set bus location name
-            if (nearestIndex !== null) {
-              setBusLocationName(busStops[nearestIndex]?.location || 'Bus Location')
-            } else {
-              setBusLocationName('En route')
-            }
-
-            // Selected stop from fare calculator
-            const selectedStop = busStops[selectedEndStop]
-            const isAtSelectedStop = nearestIndex === selectedEndStop
-
-            // Fire both OSRM calls in parallel:
-            // [0] = bus → final terminal (for arrival board)
-            // [1] = bus → fare calculator selected stop
-            const [osrmFinalMinutes, osrmSelectedMinutes] = await Promise.all([
-              isAtFinalTerminal
-                ? Promise.resolve(null)
-                : fetchOSRMTravelTime([lat, lng], finalTerminal.coordinates),
-              isAtSelectedStop
-                ? Promise.resolve(null)
-                : fetchOSRMTravelTime([lat, lng], selectedStop.coordinates)
-            ])
-
-            // Arrival board: ETA to final terminal
-            if (isAtFinalTerminal) {
-              setEstimatedArrival('Arrived')
-            } else if (osrmFinalMinutes !== null) {
-              setEstimatedArrival(`${osrmFinalMinutes} min`)
-            } else {
-              const d = Math.sqrt(
-                Math.pow(lat - finalTerminal.coordinates[0], 2) +
-                Math.pow(lng - finalTerminal.coordinates[1], 2)
-              )
-              setEstimatedArrival(`${Math.round((d * 111 / 40) * 60)} min`)
-            }
-
-            // Fare calculator: ETA to selected stop
-            if (isAtSelectedStop) {
-              setEstimatedArrivalToSelectedStop('At destination')
-            } else if (osrmSelectedMinutes !== null) {
-              setEstimatedArrivalToSelectedStop(`${osrmSelectedMinutes} min`)
-            } else {
-              const d = Math.sqrt(
-                Math.pow(lat - selectedStop.coordinates[0], 2) +
-                Math.pow(lng - selectedStop.coordinates[1], 2)
-              )
-              setEstimatedArrivalToSelectedStop(`${Math.round((d * 111 / 40) * 60)} min`)
-            }
-          } else {
-            // Invalid coordinates — keep last known location if available
-            if (lastKnownGpsRef.current) {
-              console.log('Using last known GPS location (invalid new data)')
-            } else {
-              setGpsStatus('error')
-              hasActiveGpsRef.current = false
-              setBusLocationName('GPS Error')
-              setEstimatedArrival('Schedule check')
-              setEstimatedArrivalToSelectedStop('Schedule check')
-            }
+          if (!latestRealGps) latestRealGps = gps
+          if (activeTrip && row.trip_id === activeTrip.id && !latestRealGpsForTrip) {
+            latestRealGpsForTrip = gps
           }
+        })
+
+        // 4. Strict Priority Hierarchy:
+        // Priority 1: Real GPS row matching active trip
+        // Priority 2: Direct current_lat/lng from active trip record (uploaded by driver phone)
+        // Priority 3: Any global real driver phone/satellite GPS fix
+        // Priority 4: Terminal fallback if bus has not started or is stationary
+        let finalLat: number
+        let finalLng: number
+        let locationSource: string
+        let updatedAt: string | null = null
+
+        const hasValidTripCoords =
+          activeTrip?.current_lat != null &&
+          activeTrip?.current_lng != null &&
+          Math.abs(parseFloat(activeTrip.current_lat)) > 0.001
+
+        if (latestRealGpsForTrip) {
+          finalLat = latestRealGpsForTrip.latitude
+          finalLng = latestRealGpsForTrip.longitude
+          locationSource = latestRealGpsForTrip.source
+          updatedAt = latestRealGpsForTrip.recorded_at
+        } else if (hasValidTripCoords) {
+          finalLat = parseFloat(activeTrip.current_lat)
+          finalLng = parseFloat(activeTrip.current_lng)
+          locationSource = 'driver_phone_gps'
+          updatedAt = activeTrip.gps_updated_at
+        } else if (latestRealGps) {
+          finalLat = latestRealGps.latitude
+          finalLng = latestRealGps.longitude
+          locationSource = latestRealGps.source
+          updatedAt = latestRealGps.recorded_at
         } else {
-          // No GPS data available from any source
-          if (lastKnownGpsRef.current) {
-            console.log('No new GPS data — keeping last known location')
+          // Default Manolo Fortich Bus Terminal
+          finalLat = 8.366264
+          finalLng = 124.865749
+          locationSource = 'terminal_default'
+          updatedAt = null
+        }
+
+        // Update bus state coordinates with finalLat and finalLng
+        setBusLocation([finalLat, finalLng])
+        setGpsSource(locationSource)
+        setLastUpdated(updatedAt)
+
+        setBusCoordinates([finalLat, finalLng])
+        setGpsStatus('active')
+        hasActiveGpsRef.current = true
+        const recordedAt = updatedAt || new Date().toISOString()
+        setLastGpsUpdate(recordedAt)
+        lastKnownGpsRef.current = { lat: finalLat, lng: finalLng, recorded_at: recordedAt }
+
+        console.log('Bus GPS resolved:', { finalLat, finalLng, locationSource, updatedAt })
+
+        // Check if near any stop
+        let nearestIndex = null
+        let minDistance = Infinity
+
+        busStops.forEach((stop, index) => {
+          const distance = Math.sqrt(
+            Math.pow(finalLat - stop.coordinates[0], 2) + 
+            Math.pow(finalLng - stop.coordinates[1], 2)
+          )
+
+          // Consider "near" if within 0.01 degrees (approximately 1km)
+          if (distance < 0.01 && distance < minDistance) {
+            minDistance = distance
+            nearestIndex = index
+          }
+        })
+
+        setNearbyStopIndex(nearestIndex)
+        
+        // Final terminal is always the last stop — independent of fare calculator selection
+        const finalTerminal = busStops[busStops.length - 1]
+        const isAtFinalTerminal = nearestIndex === busStops.length - 1
+        
+        // Set bus location name
+        if (nearestIndex !== null) {
+          setBusLocationName(busStops[nearestIndex]?.location || 'Bus Location')
+        } else {
+          setBusLocationName('En route')
+        }
+
+        // Selected stop from fare calculator
+        const selectedStop = busStops[selectedEndStop]
+        const isAtSelectedStop = nearestIndex === selectedEndStop
+
+        if (finalTerminal && selectedStop) {
+          // Fire both OSRM calls in parallel:
+          // [0] = bus → final terminal (for arrival board)
+          // [1] = bus → fare calculator selected stop
+          const [osrmFinalMinutes, osrmSelectedMinutes] = await Promise.all([
+            isAtFinalTerminal
+              ? Promise.resolve(null)
+              : fetchOSRMTravelTime([finalLat, finalLng], finalTerminal.coordinates),
+            isAtSelectedStop
+              ? Promise.resolve(null)
+              : fetchOSRMTravelTime([finalLat, finalLng], selectedStop.coordinates)
+          ])
+
+          // Arrival board: ETA to final terminal
+          if (isAtFinalTerminal) {
+            setEstimatedArrival('Arrived')
+          } else if (osrmFinalMinutes !== null) {
+            setEstimatedArrival(`${osrmFinalMinutes} min`)
           } else {
-            console.log('No GPS data found from database')
-            setGpsStatus('error')
-            hasActiveGpsRef.current = false
-            setBusLocationName('Schedule coming soon')
-            setEstimatedArrival('Schedule check')
-            setEstimatedArrivalToSelectedStop('Schedule check')
+            const d = Math.sqrt(
+              Math.pow(finalLat - finalTerminal.coordinates[0], 2) +
+              Math.pow(finalLng - finalTerminal.coordinates[1], 2)
+            )
+            setEstimatedArrival(`${Math.round((d * 111 / 40) * 60)} min`)
+          }
+
+          // Fare calculator: ETA to selected stop
+          if (isAtSelectedStop) {
+            setEstimatedArrivalToSelectedStop('At destination')
+          } else if (osrmSelectedMinutes !== null) {
+            setEstimatedArrivalToSelectedStop(`${osrmSelectedMinutes} min`)
+          } else {
+            const d = Math.sqrt(
+              Math.pow(finalLat - selectedStop.coordinates[0], 2) +
+              Math.pow(finalLng - selectedStop.coordinates[1], 2)
+            )
+            setEstimatedArrivalToSelectedStop(`${Math.round((d * 111 / 40) * 60)} min`)
           }
         }
-      } catch (error) {
-        console.error('GPS fetch error:', error)
-        // Keep last known location on error — don't clear the map
-        if (!lastKnownGpsRef.current) {
-          setGpsStatus('error')
-          hasActiveGpsRef.current = false
-          setBusLocationName('Schedule coming soon')
-          setEstimatedArrival('Schedule check')
-          setEstimatedArrivalToSelectedStop('Schedule check')
-        }
+      } catch (err) {
+        console.error('Error fetching live bus GPS:', err)
       }
     }
 
     // Initial fetch
     fetchBusGPS()
 
-    // Set up real-time subscription for GPS updates
-    let gpsLogsSubscription: any = null
-    let tripsSubscription: any = null
+    // Set up real-time subscriptions for trips and GPS updates
+    let tripSubscription: any = null
+    let gpsSubscription: any = null
 
     if (supabase) {
-      gpsLogsSubscription = supabase
-        .channel('public-dashboard-gps-locations-channel')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gps_locations' }, () => {
-          fetchBusGPS()
-        })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gps_locations' }, () => {
+      tripSubscription = supabase
+        .channel('public-dashboard-trip-updates')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'trips' }, () => {
           fetchBusGPS()
         })
         .subscribe()
 
-      tripsSubscription = supabase
-        .channel('public-dashboard-trips-channel')
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'trips' }, () => {
+      gpsSubscription = supabase
+        .channel('public-dashboard-gps-inserts')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gps_locations' }, () => {
           fetchBusGPS()
         })
         .subscribe()
@@ -727,11 +745,11 @@ function App() {
     const pollingInterval = setInterval(fetchBusGPS, 10000)
 
     return () => {
-      if (gpsLogsSubscription) {
-        gpsLogsSubscription.unsubscribe()
+      if (tripSubscription) {
+        tripSubscription.unsubscribe()
       }
-      if (tripsSubscription) {
-        tripsSubscription.unsubscribe()
+      if (gpsSubscription) {
+        gpsSubscription.unsubscribe()
       }
       clearInterval(pollingInterval)
     }
@@ -830,7 +848,6 @@ function App() {
   }, [])
 
   return (
-    <>
     <div className="min-h-screen bg-platform text-mist">
       <a href="#main" className="skip-link">Skip to main content</a>
 
@@ -918,9 +935,9 @@ function App() {
                       <MapRouteFitter coordinates={routeCoordinates} busStops={busStops} />
                       
                       {/* Bus GPS marker */}
-                      {busCoordinates && (
+                      {(busCoordinates || busLocation) && (
                         <Marker
-                          position={busCoordinates}
+                          position={(busCoordinates || busLocation)!}
                           icon={createBusIcon(busLocationName)}
                         />
                       )}
@@ -999,7 +1016,7 @@ function App() {
                          gpsStatus === 'error' ? 'GPS unavailable' :
                          nearbyStopIndex !== null 
                           ? `Approaching ${busStops[nearbyStopIndex]?.location || 'next stop'}`
-                          : busCoordinates 
+                          : (busCoordinates || busLocation) 
                             ? 'En route'
                             : 'Waiting for GPS data...'}
                       </p>
@@ -1122,7 +1139,7 @@ function App() {
                               <p className="font-signage font-600 text-sm">
                                 {busStops[selectedStartStop]?.location || 'N/A'} → {busStops[selectedEndStop]?.location || 'N/A'}
                               </p>
-                              {gpsStatus === 'active' && busCoordinates && (
+                              {gpsStatus === 'active' && (busCoordinates || busLocation) && (
                                 <p className="text-xs text-amber mt-1">
                                   Est. arrival: {estimatedArrivalToSelectedStop}
                                 </p>
@@ -1994,42 +2011,6 @@ function App() {
         </div>
       </footer>
     </div>
-
-    {/* Print Styles */}
-    <style>{`
-      @media print {
-        body * {
-          visibility: hidden;
-        }
-        #receipt-content, #receipt-content * {
-          visibility: visible;
-        }
-        #receipt-content {
-          position: absolute;
-          left: 0;
-          top: 0;
-          width: 100%;
-          margin: 0;
-          padding: 20px;
-          background: white;
-          color: black;
-        }
-        .bg-amber\\/10, .bg-signal, .bg-black\\/40 {
-          background: white !important;
-          color: black !important;
-        }
-        .text-amber, .text-mist {
-          color: black !important;
-        }
-        .border-amber\\/30, .border-white\\/10 {
-          border: 1px solid #ccc !important;
-        }
-        button {
-          display: none !important;
-        }
-      }
-    `}</style>
-    </>
   )
 }
 

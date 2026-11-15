@@ -116,3 +116,36 @@ details[open] .chev {
   transform: rotate(180deg);
 }
 
+/* Print Styles for Reservation Receipt */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #receipt-content, #receipt-content * {
+    visibility: visible;
+  }
+  #receipt-content {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20px;
+    background: white;
+    color: black;
+  }
+  .bg-amber\/10, .bg-signal, .bg-black\/40 {
+    background: white !important;
+    color: black !important;
+  }
+  .text-amber, .text-mist {
+    color: black !important;
+  }
+  .border-amber\/30, .border-white\/10 {
+    border: 1px solid #ccc !important;
+  }
+  button {
+    display: none !important;
+  }
+}
+
