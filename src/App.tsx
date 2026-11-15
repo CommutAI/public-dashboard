@@ -283,24 +283,45 @@ function App() {
   const [fareMatrix, setFareMatrix] = useState<Record<string, Record<string, { regular: number; discounted: number }>>>({})
   const [loadingFares, setLoadingFares] = useState(true)
 
+  // Helper to normalize bus stop names to match official fare matrix keys
+  const normalizeFareStop = (name: string): string => {
+    const clean = (name || '').trim().toLowerCase()
+    if (clean.includes('manolo') && (clean.includes('terminal') || clean.includes('fortich'))) return 'Maluko Manolo'
+    if (clean.includes('agora')) return 'Agora'
+    if (clean === 'alae') return 'Alae Manolo'
+    if (clean.includes('gaisano')) return 'Agora'
+    return name.trim()
+  }
+
   // Calculate fare between two stops using the fare matrix
   const calculateFare = (startIndex: number, endIndex: number) => {
     if (startIndex === endIndex || !busStops[startIndex] || !busStops[endIndex]) {
       return { regular: 0, discounted: 0 }
     }
 
-    const fromStop = busStops[startIndex].location
-    const toStop = busStops[endIndex].location
+    const rawFrom = busStops[startIndex].location
+    const rawTo = busStops[endIndex].location
+    const fromStop = normalizeFareStop(rawFrom)
+    const toStop = normalizeFareStop(rawTo)
 
     // Check if fare exists in matrix (forward direction)
     if (fareMatrix[fromStop] && fareMatrix[fromStop][toStop]) {
       return fareMatrix[fromStop][toStop]
     }
 
+    // Check raw name match
+    if (fareMatrix[rawFrom] && fareMatrix[rawFrom][rawTo]) {
+      return fareMatrix[rawFrom][rawTo]
+    }
+
     // Check reverse direction (if matrix is bidirectional)
     if (fareMatrix[toStop] && fareMatrix[toStop][fromStop]) {
       return fareMatrix[toStop][fromStop]
     }
+    if (fareMatrix[rawTo] && fareMatrix[rawTo][rawFrom]) {
+      return fareMatrix[rawTo][rawFrom]
+    }
+
     const stopDistance = Math.abs(endIndex - startIndex)
     const estimatedFare = Math.min(15 + (stopDistance * 5), 110) // Base fare + distance factor, max 110
     const estimatedDiscounted = Math.max(estimatedFare - 10, 15) // Discounted fare
@@ -320,6 +341,7 @@ function App() {
         const { data, error } = await supabase
           .from('fare_matrix')
           .select('route_from, route_to, regular_fare, discounted_fare')
+          .limit(1000)
 
         if (error || !data) {
           console.error('Failed to fetch fare matrix:', error)
