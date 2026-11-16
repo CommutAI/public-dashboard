@@ -176,8 +176,8 @@ function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [currentTime, setCurrentTime] = useState('')
   const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([])
-  const [selectedStartStop, setSelectedStartStop] = useState<number>(0)
-  const [selectedEndStop, setSelectedEndStop] = useState<number>(0)
+  const [selectedStartLocation, setSelectedStartLocation] = useState<string>('')
+  const [selectedEndLocation, setSelectedEndLocation] = useState<string>('')
   const [selectedDirection, setSelectedDirection] = useState<'agora-to-manolo' | 'manolo-to-agora'>('agora-to-manolo')
   const hasActiveGpsRef = useRef(false)
   const lastKnownGpsRef = useRef<{ lat: number; lng: number; recorded_at: string } | null>(null)
@@ -283,90 +283,43 @@ function App() {
   // Fare matrix fetched from Supabase
   const [fareMatrix, setFareMatrix] = useState<Record<string, Record<string, { regular: number; discounted: number }>>>({})
   const [loadingFares, setLoadingFares] = useState(true)
-
-  // Helper to normalize bus stop names to match official fare matrix keys
-  const normalizeFareStop = (name: string): string => {
-    const clean = (name || '').trim().toLowerCase()
-    if (clean.includes('manolo') && (clean.includes('terminal') || clean.includes('fortich'))) return 'Maluko Manolo'
-    if (clean.includes('agora')) return 'Agora'
-    if (clean === 'alae') return 'Alae Manolo'
-    if (clean.includes('gaisano')) return 'Agora'
-    return name.trim()
-  }
+  const [fareLocations, setFareLocations] = useState<string[]>([])
 
   // Get available destinations from fare matrix for a given source
-  const getAvailableDestinations = (fromIndex: number): number[] => {
-    if (!busStops[fromIndex]) return []
-    const fromStop = normalizeFareStop(busStops[fromIndex].location)
-
-    const availableIndices: number[] = []
-    busStops.forEach((stop, index) => {
-      if (index === fromIndex) return
-      const toStop = normalizeFareStop(stop.location)
-
-      // Check if fare exists in matrix (either normalized or raw name)
-      if (fareMatrix[fromStop] && fareMatrix[fromStop][toStop]) {
-        availableIndices.push(index)
-      } else if (fareMatrix[busStops[fromIndex].location] && fareMatrix[busStops[fromIndex].location][stop.location]) {
-        availableIndices.push(index)
-      }
-    })
-
-    return availableIndices
+  const getAvailableDestinations = (fromLocation: string): string[] => {
+    if (!fareMatrix[fromLocation]) return []
+    return Object.keys(fareMatrix[fromLocation])
   }
 
-  // Get stops available for selected direction
-  const getStopsForDirection = (direction: 'agora-to-manolo' | 'manolo-to-agora'): number[] => {
-    const stopIndices: number[] = []
-    busStops.forEach((stop, index) => {
-      const normalized = normalizeFareStop(stop.location)
-
-      if (direction === 'agora-to-manolo') {
-        // Agora to Manolo: stops should have fares from Agora
-        if (fareMatrix['Agora'] && fareMatrix['Agora'][normalized]) {
-          stopIndices.push(index)
+  // Get source locations for selected direction
+  const getSourceLocations = (direction: 'agora-to-manolo' | 'manolo-to-agora'): string[] => {
+    if (direction === 'agora-to-manolo') {
+      // Agora to Manolo: source is Agora
+      return fareMatrix['Agora'] ? Object.keys(fareMatrix['Agora']) : []
+    } else {
+      // Manolo to Agora: sources are locations that have Agora as destination
+      const sources: string[] = []
+      Object.keys(fareMatrix).forEach(from => {
+        if (fareMatrix[from]['Agora']) {
+          sources.push(from)
         }
-      } else {
-        // Manolo to Agora: stops should have fares to Agora
-        if (fareMatrix[normalized] && fareMatrix[normalized]['Agora']) {
-          stopIndices.push(index)
-        }
-      }
-    })
-
-    return stopIndices
+      })
+      return sources
+    }
   }
 
-  // Calculate fare between two stops using the fare matrix
-  const calculateFare = (startIndex: number, endIndex: number) => {
-    if (startIndex === endIndex || !busStops[startIndex] || !busStops[endIndex]) {
+  // Calculate fare between two locations using the fare matrix
+  const calculateFare = (from: string, to: string) => {
+    if (!from || !to || from === to) {
       return { regular: 0, discounted: 0 }
     }
 
-    const rawFrom = busStops[startIndex].location
-    const rawTo = busStops[endIndex].location
-    const fromStop = normalizeFareStop(rawFrom)
-    const toStop = normalizeFareStop(rawTo)
-
-    // Check if fare exists in matrix (forward direction)
-    if (fareMatrix[fromStop] && fareMatrix[fromStop][toStop]) {
-      return fareMatrix[fromStop][toStop]
+    if (fareMatrix[from] && fareMatrix[from][to]) {
+      return fareMatrix[from][to]
     }
 
-    // Check raw name match
-    if (fareMatrix[rawFrom] && fareMatrix[rawFrom][rawTo]) {
-      return fareMatrix[rawFrom][rawTo]
-    }
-
-    // Check reverse direction (if matrix is bidirectional)
-    if (fareMatrix[toStop] && fareMatrix[toStop][fromStop]) {
-      return fareMatrix[toStop][fromStop]
-    }
-    if (fareMatrix[rawTo] && fareMatrix[rawTo][rawFrom]) {
-      return fareMatrix[rawTo][rawFrom]
-    }
-
-    const stopDistance = Math.abs(endIndex - startIndex)
+    return { regular: 0, discounted: 0 }
+  }
     const estimatedFare = Math.min(15 + (stopDistance * 5), 110) // Base fare + distance factor, max 110
     const estimatedDiscounted = Math.max(estimatedFare - 10, 15) // Discounted fare
     
@@ -394,6 +347,8 @@ function App() {
 
         // Build nested lookup: matrix[from][to] = { regular, discounted }
         const matrix: Record<string, Record<string, { regular: number; discounted: number }>> = {}
+        const locations = new Set<string>()
+
         data.forEach((row: any) => {
           const from = row.route_from?.trim()
           const to = row.route_to?.trim()
@@ -402,9 +357,12 @@ function App() {
           if (!from || !to || isNaN(regular) || isNaN(discounted)) return
           if (!matrix[from]) matrix[from] = {}
           matrix[from][to] = { regular, discounted }
+          locations.add(from)
+          locations.add(to)
         })
 
         setFareMatrix(matrix)
+        setFareLocations(Array.from(locations).sort())
       } catch (err) {
         console.error('Error fetching fare matrix:', err)
       } finally {
@@ -543,19 +501,19 @@ function App() {
     return () => clearInterval(interval)
   }, [])
 
-  // Fetch route when bus stops are loaded
+  // Initialize fare calculator when fare matrix is loaded
   useEffect(() => {
-    if (busStops.length > 0) {
-      setSelectedEndStop(busStops.length - 1)
-      fetchRoute()
-      // Initialize fare calculator stops based on default direction
-      const directionStops = getStopsForDirection(selectedDirection)
-      if (directionStops.length > 0) {
-        setSelectedStartStop(directionStops[0])
-        setSelectedEndStop(directionStops[directionStops.length - 1])
+    if (fareLocations.length > 0) {
+      const sources = getSourceLocations(selectedDirection)
+      if (sources.length > 0) {
+        setSelectedStartLocation(sources[0])
+        const destinations = getAvailableDestinations(sources[0])
+        if (destinations.length > 0) {
+          setSelectedEndLocation(destinations[0])
+        }
       }
     }
-  }, [busStops, selectedDirection])
+  }, [fareLocations, selectedDirection])
 
   // Cooldown timer for reservations
   useEffect(() => {
@@ -1182,10 +1140,13 @@ function App() {
                           onChange={(e) => {
                             setSelectedDirection(e.target.value as 'agora-to-manolo' | 'manolo-to-agora')
                             // Reset selections when direction changes
-                            const newStops = getStopsForDirection(e.target.value as 'agora-to-manolo' | 'manolo-to-agora')
-                            if (newStops.length > 0) {
-                              setSelectedStartStop(newStops[0])
-                              setSelectedEndStop(newStops[newStops.length - 1])
+                            const newSources = getSourceLocations(e.target.value as 'agora-to-manolo' | 'manolo-to-agora')
+                            if (newSources.length > 0) {
+                              setSelectedStartLocation(newSources[0])
+                              const newDestinations = getAvailableDestinations(newSources[0])
+                              if (newDestinations.length > 0) {
+                                setSelectedEndLocation(newDestinations[0])
+                              }
                             }
                           }}
                         >
@@ -1198,19 +1159,19 @@ function App() {
                         <select
                           id="start-stop"
                           className="w-full px-4 py-2 rounded-lg border border-white/20 bg-black/40 text-mist focus:outline-none focus:ring-2 focus:ring-amber [&_option]:bg-signal [&_option]:text-mist"
-                          value={selectedStartStop}
+                          value={selectedStartLocation}
                           onChange={(e) => {
-                            const newStart = Number(e.target.value)
-                            setSelectedStartStop(newStart)
+                            const newStart = e.target.value
+                            setSelectedStartLocation(newStart)
                             // Reset end stop to first available destination
                             const available = getAvailableDestinations(newStart)
                             if (available.length > 0) {
-                              setSelectedEndStop(available[0])
+                              setSelectedEndLocation(available[0])
                             }
                           }}
                         >
-                          {getStopsForDirection(selectedDirection).map((index) => (
-                            <option key={index} value={index}>{busStops[index].location}</option>
+                          {getSourceLocations(selectedDirection).map((location) => (
+                            <option key={location} value={location}>{location}</option>
                           ))}
                         </select>
                       </div>
@@ -1219,31 +1180,26 @@ function App() {
                         <select
                           id="end-stop"
                           className="w-full px-4 py-2 rounded-lg border border-white/20 bg-black/40 text-mist focus:outline-none focus:ring-2 focus:ring-amber [&_option]:bg-signal [&_option]:text-mist"
-                          value={selectedEndStop}
-                          onChange={(e) => setSelectedEndStop(Number(e.target.value))}
+                          value={selectedEndLocation}
+                          onChange={(e) => setSelectedEndLocation(e.target.value)}
                         >
-                          {getAvailableDestinations(selectedStartStop).map((index) => (
-                            <option key={index} value={index}>{busStops[index].location}</option>
+                          {getAvailableDestinations(selectedStartLocation).map((location) => (
+                            <option key={location} value={location}>{location}</option>
                           ))}
                         </select>
                       </div>
                     </div>
 
                     {(() => {
-                      const fare = calculateFare(selectedStartStop, selectedEndStop)
+                      const fare = calculateFare(selectedStartLocation, selectedEndLocation)
                       return (
                         <div className="mt-4 pt-4 border-t border-white/10">
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="text-sm text-mist/70">Selected Route</p>
                               <p className="font-signage font-600 text-sm">
-                                {busStops[selectedStartStop]?.location || 'N/A'} → {busStops[selectedEndStop]?.location || 'N/A'}
+                                {selectedStartLocation || 'N/A'} → {selectedEndLocation || 'N/A'}
                               </p>
-                              {gpsStatus === 'active' && (busCoordinates || busLocation) && (
-                                <p className="text-xs text-amber mt-1">
-                                  Est. arrival: {estimatedArrivalToSelectedStop}
-                                </p>
-                              )}
                             </div>
                             <div className="text-right">
                               <p className="text-sm text-mist/70">Fare</p>
