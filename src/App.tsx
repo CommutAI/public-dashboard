@@ -178,6 +178,7 @@ function App() {
   const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([])
   const [selectedStartStop, setSelectedStartStop] = useState<number>(0)
   const [selectedEndStop, setSelectedEndStop] = useState<number>(0)
+  const [selectedDirection, setSelectedDirection] = useState<'agora-to-manolo' | 'manolo-to-agora'>('agora-to-manolo')
   const hasActiveGpsRef = useRef(false)
   const lastKnownGpsRef = useRef<{ lat: number; lng: number; recorded_at: string } | null>(null)
 
@@ -312,6 +313,28 @@ function App() {
     })
 
     return availableIndices
+  }
+
+  // Get stops available for selected direction
+  const getStopsForDirection = (direction: 'agora-to-manolo' | 'manolo-to-agora'): number[] => {
+    const stopIndices: number[] = []
+    busStops.forEach((stop, index) => {
+      const normalized = normalizeFareStop(stop.location)
+
+      if (direction === 'agora-to-manolo') {
+        // Agora to Manolo: stops should have fares from Agora
+        if (fareMatrix['Agora'] && fareMatrix['Agora'][normalized]) {
+          stopIndices.push(index)
+        }
+      } else {
+        // Manolo to Agora: stops should have fares to Agora
+        if (fareMatrix[normalized] && fareMatrix[normalized]['Agora']) {
+          stopIndices.push(index)
+        }
+      }
+    })
+
+    return stopIndices
   }
 
   // Calculate fare between two stops using the fare matrix
@@ -525,8 +548,14 @@ function App() {
     if (busStops.length > 0) {
       setSelectedEndStop(busStops.length - 1)
       fetchRoute()
+      // Initialize fare calculator stops based on default direction
+      const directionStops = getStopsForDirection(selectedDirection)
+      if (directionStops.length > 0) {
+        setSelectedStartStop(directionStops[0])
+        setSelectedEndStop(directionStops[directionStops.length - 1])
+      }
     }
-  }, [busStops])
+  }, [busStops, selectedDirection])
 
   // Cooldown timer for reservations
   useEffect(() => {
@@ -1145,6 +1174,26 @@ function App() {
                   <>
                     <div className="space-y-4">
                       <div>
+                        <label htmlFor="direction" className="block text-sm font-medium text-mist/70 mb-2">Direction</label>
+                        <select
+                          id="direction"
+                          className="w-full px-4 py-2 rounded-lg border border-white/20 bg-black/40 text-mist focus:outline-none focus:ring-2 focus:ring-amber [&_option]:bg-signal [&_option]:text-mist"
+                          value={selectedDirection}
+                          onChange={(e) => {
+                            setSelectedDirection(e.target.value as 'agora-to-manolo' | 'manolo-to-agora')
+                            // Reset selections when direction changes
+                            const newStops = getStopsForDirection(e.target.value as 'agora-to-manolo' | 'manolo-to-agora')
+                            if (newStops.length > 0) {
+                              setSelectedStartStop(newStops[0])
+                              setSelectedEndStop(newStops[newStops.length - 1])
+                            }
+                          }}
+                        >
+                          <option value="agora-to-manolo">Agora Terminal → Manolo Fortich Terminal</option>
+                          <option value="manolo-to-agora">Manolo Fortich Terminal → Agora Terminal</option>
+                        </select>
+                      </div>
+                      <div>
                         <label htmlFor="start-stop" className="block text-sm font-medium text-mist/70 mb-2">From</label>
                         <select
                           id="start-stop"
@@ -1160,8 +1209,8 @@ function App() {
                             }
                           }}
                         >
-                          {busStops.map((stop, index) => (
-                            <option key={index} value={index}>{stop.location}</option>
+                          {getStopsForDirection(selectedDirection).map((index) => (
+                            <option key={index} value={index}>{busStops[index].location}</option>
                           ))}
                         </select>
                       </div>
