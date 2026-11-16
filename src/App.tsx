@@ -293,6 +293,27 @@ function App() {
     return name.trim()
   }
 
+  // Get available destinations from fare matrix for a given source
+  const getAvailableDestinations = (fromIndex: number): number[] => {
+    if (!busStops[fromIndex]) return []
+    const fromStop = normalizeFareStop(busStops[fromIndex].location)
+
+    const availableIndices: number[] = []
+    busStops.forEach((stop, index) => {
+      if (index === fromIndex) return
+      const toStop = normalizeFareStop(stop.location)
+
+      // Check if fare exists in matrix (either normalized or raw name)
+      if (fareMatrix[fromStop] && fareMatrix[fromStop][toStop]) {
+        availableIndices.push(index)
+      } else if (fareMatrix[busStops[fromIndex].location] && fareMatrix[busStops[fromIndex].location][stop.location]) {
+        availableIndices.push(index)
+      }
+    })
+
+    return availableIndices
+  }
+
   // Calculate fare between two stops using the fare matrix
   const calculateFare = (startIndex: number, endIndex: number) => {
     if (startIndex === endIndex || !busStops[startIndex] || !busStops[endIndex]) {
@@ -1129,7 +1150,15 @@ function App() {
                           id="start-stop"
                           className="w-full px-4 py-2 rounded-lg border border-white/20 bg-black/40 text-mist focus:outline-none focus:ring-2 focus:ring-amber [&_option]:bg-signal [&_option]:text-mist"
                           value={selectedStartStop}
-                          onChange={(e) => setSelectedStartStop(Number(e.target.value))}
+                          onChange={(e) => {
+                            const newStart = Number(e.target.value)
+                            setSelectedStartStop(newStart)
+                            // Reset end stop to first available destination
+                            const available = getAvailableDestinations(newStart)
+                            if (available.length > 0) {
+                              setSelectedEndStop(available[0])
+                            }
+                          }}
                         >
                           {busStops.map((stop, index) => (
                             <option key={index} value={index}>{stop.location}</option>
@@ -1144,8 +1173,8 @@ function App() {
                           value={selectedEndStop}
                           onChange={(e) => setSelectedEndStop(Number(e.target.value))}
                         >
-                          {busStops.map((stop, index) => (
-                            <option key={index} value={index}>{stop.location}</option>
+                          {getAvailableDestinations(selectedStartStop).map((index) => (
+                            <option key={index} value={index}>{busStops[index].location}</option>
                           ))}
                         </select>
                       </div>
