@@ -308,6 +308,14 @@ function App() {
     }
   }
 
+  // Calculate fare based on selected locations
+  const calculateFare = (from: string, to: string): { regular: number; discounted: number } | null => {
+    if (!fareMatrix[from] || !fareMatrix[from][to]) {
+      return null // Invalid combination
+    }
+    return fareMatrix[from][to]
+  }
+
   // Calculate fare between two locations using the fare matrix
   const calculateFare = (from: string, to: string) => {
     if (!from || !to || from === to) {
@@ -1168,6 +1176,7 @@ function App() {
 
                     {(() => {
                       const fare = calculateFare(selectedStartLocation, selectedEndLocation)
+                      const isValid = fare !== null
                       return (
                         <div className="mt-4 pt-4 border-t border-white/10">
                           <div className="flex items-center justify-between">
@@ -1181,13 +1190,15 @@ function App() {
                               <p className="text-sm text-mist/70">Fare</p>
                               {loadingFares ? (
                                 <p className="text-sm text-mist/50 mt-1">Loading...</p>
-                              ) : (
+                              ) : isValid && fare ? (
                                 <>
                                   <p className="font-signage font-700 text-2xl text-amber">
                                     ₱{fare.regular.toFixed(2)}
                                   </p>
                                   <p className="text-xs text-mist/50">Discounted: ₱{fare.discounted.toFixed(2)}</p>
                                 </>
+                              ) : (
+                                <p className="text-sm text-red-400 mt-1">Invalid route combination</p>
                               )}
                             </div>
                           </div>
