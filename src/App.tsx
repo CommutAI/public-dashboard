@@ -660,7 +660,11 @@ function App() {
         setLastGpsUpdate(recordedAt)
         lastKnownGpsRef.current = { lat: finalLat, lng: finalLng, recorded_at: recordedAt }
 
-        console.log('Bus GPS resolved:', { finalLat, finalLng, locationSource, updatedAt })
+        // Only log if GPS data actually changed
+        const prevGps = lastKnownGpsRef.current
+        if (!prevGps || prevGps.lat !== finalLat || prevGps.lng !== finalLng) {
+          console.log('Bus GPS resolved:', { finalLat, finalLng, locationSource, updatedAt })
+        }
 
         // Check if near any stop
         let nearestIndex = null
