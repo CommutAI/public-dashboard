@@ -814,44 +814,14 @@ function App() {
           const countData = passengerCountData as any
           // Use AI count if available, otherwise use manual count
           const currentCount = countData.ai_count || countData.count
+          const capacity = 35
+          const percentage = Math.round((currentCount / capacity) * 100)
 
-          // Fetch bus capacity from the trips table
-          if (countData.trip_id) {
-            const { data: tripData, error: tripError } = await supabase
-              .from('trips')
-              .select('bus_id')
-              .eq('id', countData.trip_id)
-              .single()
-
-            if (tripError) {
-              return
-            }
-
-            if (tripData && (tripData as any).bus_id) {
-              const tripDataAny = tripData as any
-              const { data: busData, error: busError } = await supabase
-                .from('buses')
-                .select('seat_capacity')
-                .eq('id', tripDataAny.bus_id)
-                .single()
-
-              if (busError) {
-                return
-              }
-
-              if (busData && (busData as any).seat_capacity) {
-                const busDataAny = busData as any
-                const capacity = busDataAny.seat_capacity
-                const percentage = Math.round((currentCount / capacity) * 100)
-
-                setOccupancyData({
-                  current: currentCount,
-                  capacity: capacity,
-                  percentage: percentage
-                })
-              }
-            }
-          }
+          setOccupancyData({
+            current: currentCount,
+            capacity: capacity,
+            percentage: percentage
+          })
         }
       } catch (error) {
         // Silently handle occupancy data errors
