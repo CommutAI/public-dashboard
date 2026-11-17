@@ -320,14 +320,6 @@ function App() {
 
     return { regular: 0, discounted: 0 }
   }
-    const estimatedFare = Math.min(15 + (stopDistance * 5), 110) // Base fare + distance factor, max 110
-    const estimatedDiscounted = Math.max(estimatedFare - 10, 15) // Discounted fare
-    
-    return { 
-      regular: estimatedFare, 
-      discounted: estimatedDiscounted 
-    }
-  }
 
   // Fetch fare matrix from Supabase
   useEffect(() => {
