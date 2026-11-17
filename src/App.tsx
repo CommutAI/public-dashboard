@@ -205,7 +205,7 @@ function App() {
   const [lastReservationTime, setLastReservationTime] = useState<number | null>(null)
   const [cooldownRemaining, setCooldownRemaining] = useState<number>(0)
   const [busStops, setBusStops] = useState<Array<{ stop: string; location: string; status: string; coordinates: [number, number] }>>(busStopsData)
-  const [loadingStops, setLoadingStops] = useState(true)
+  const [loadingStops, setLoadingStops] = useState(false) // Using hardcoded data, no loading needed
   const [busCoordinates, setBusCoordinates] = useState<[number, number] | null>(null)
   const [busLocation, setBusLocation] = useState<[number, number] | null>(null)
   const [gpsSource, setGpsSource] = useState<string>('terminal_default')
@@ -334,6 +334,7 @@ function App() {
 
         if (error || !data) {
           console.error('Failed to fetch fare matrix:', error)
+          setLoadingFares(false)
           return
         }
 
