@@ -316,19 +316,6 @@ function App() {
     return fareMatrix[from][to]
   }
 
-  // Calculate fare between two locations using the fare matrix
-  const calculateFare = (from: string, to: string) => {
-    if (!from || !to || from === to) {
-      return { regular: 0, discounted: 0 }
-    }
-
-    if (fareMatrix[from] && fareMatrix[from][to]) {
-      return fareMatrix[from][to]
-    }
-
-    return { regular: 0, discounted: 0 }
-  }
-
   // Fetch fare matrix from Supabase
   useEffect(() => {
     const fetchFareMatrix = async () => {
