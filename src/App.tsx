@@ -579,6 +579,14 @@ function App() {
           .order('started_at', { ascending: false })
           .maybeSingle() as any)
 
+        // If no active trip, set status to error instead of connecting
+        if (!activeTrip && !hasActiveGpsRef.current) {
+          setGpsStatus('error')
+          setEstimatedArrival('No active trip')
+          setEstimatedArrivalToSelectedStop('No active trip')
+          return
+        }
+
         // 2. Fetch recent GPS location rows including 'source'
         const { data: gpsRows } = await supabase
           .from('gps_locations')
