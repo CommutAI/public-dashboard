@@ -693,8 +693,9 @@ function App() {
         }
 
         // Selected stop from fare calculator
-        const selectedStop = busStops[selectedEndStop]
-        const isAtSelectedStop = nearestIndex === selectedEndStop
+        // GPS tracking removed - fare calculator now uses fare matrix locations
+        const selectedStop = null
+        const isAtSelectedStop = false
 
         if (finalTerminal && selectedStop) {
           // Fire both OSRM calls in parallel:
@@ -775,7 +776,7 @@ function App() {
       }
       clearInterval(pollingInterval)
     }
-  }, [busStops, selectedEndStop])
+  }, [busStops])
 
   // Fetch occupancy data from database
   useEffect(() => {
