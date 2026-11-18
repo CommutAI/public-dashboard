@@ -216,7 +216,6 @@ function App() {
   const [lastGpsUpdate, setLastGpsUpdate] = useState<string | null>(null)
   const [occupancyData, setOccupancyData] = useState<{ current: number; capacity: number; percentage: number } | null>(null)
   const [estimatedArrival, setEstimatedArrival] = useState<string>('Calculating...')
-  const [estimatedArrivalToSelectedStop, setEstimatedArrivalToSelectedStop] = useState<string>('Calculating...')
   const [tripSchedules, setTripSchedules] = useState<any[]>([
     {
       id: 1,
@@ -563,7 +562,6 @@ function App() {
         if (!hasActiveGpsRef.current) {
           setGpsStatus('connecting')
           setEstimatedArrival('Connecting...')
-          setEstimatedArrivalToSelectedStop('Connecting...')
         }
 
         // 1. Fetch active trip coordinates (Driver app updates current_lat & current_lng live)
@@ -578,7 +576,6 @@ function App() {
         if (!activeTrip && !hasActiveGpsRef.current) {
           setGpsStatus('error')
           setEstimatedArrival('No active trip')
-          setEstimatedArrivalToSelectedStop('No active trip')
           return
         }
 
@@ -702,48 +699,7 @@ function App() {
 
         // Selected stop from fare calculator
         // GPS tracking removed - fare calculator now uses fare matrix locations
-        const selectedStop = null
-        const isAtSelectedStop = false
-
-        if (finalTerminal && selectedStop) {
-          // Fire both OSRM calls in parallel:
-          // [0] = bus → final terminal (for arrival board)
-          // [1] = bus → fare calculator selected stop
-          const [osrmFinalMinutes, osrmSelectedMinutes] = await Promise.all([
-            isAtFinalTerminal
-              ? Promise.resolve(null)
-              : fetchOSRMTravelTime([finalLat, finalLng], finalTerminal.coordinates),
-            isAtSelectedStop
-              ? Promise.resolve(null)
-              : fetchOSRMTravelTime([finalLat, finalLng], selectedStop.coordinates)
-          ])
-
-          // Arrival board: ETA to final terminal
-          if (isAtFinalTerminal) {
-            setEstimatedArrival('Arrived')
-          } else if (osrmFinalMinutes !== null) {
-            setEstimatedArrival(`${osrmFinalMinutes} min`)
-          } else {
-            const d = Math.sqrt(
-              Math.pow(finalLat - finalTerminal.coordinates[0], 2) +
-              Math.pow(finalLng - finalTerminal.coordinates[1], 2)
-            )
-            setEstimatedArrival(`${Math.round((d * 111 / 40) * 60)} min`)
-          }
-
-          // Fare calculator: ETA to selected stop
-          if (isAtSelectedStop) {
-            setEstimatedArrivalToSelectedStop('At destination')
-          } else if (osrmSelectedMinutes !== null) {
-            setEstimatedArrivalToSelectedStop(`${osrmSelectedMinutes} min`)
-          } else {
-            const d = Math.sqrt(
-              Math.pow(finalLat - selectedStop.coordinates[0], 2) +
-              Math.pow(finalLng - selectedStop.coordinates[1], 2)
-            )
-            setEstimatedArrivalToSelectedStop(`${Math.round((d * 111 / 40) * 60)} min`)
-          }
-        }
+        // ETA to selected stop is no longer calculated
       } catch (err) {
         console.error('Error fetching live bus GPS:', err)
       }
