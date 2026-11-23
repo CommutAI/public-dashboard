@@ -730,12 +730,29 @@ function App() {
             setBusLocationName('En route')
           }
 
-          // Final terminal is always the last stop — independent of fare calculator selection
+          // Final terminal is always the last stop
           const finalTerminal = busStops[busStops.length - 1]
           const isAtFinalTerminal = nearestIndex === busStops.length - 1
 
-          // Selected stop ETA: not yet implemented (fare matrix doesn't map to GPS stops)
-          // setEstimatedArrivalToSelectedStop(...) — future work
+          // Calculate ETA from current bus position → final terminal via OSRM
+          if (isAtFinalTerminal) {
+            setEstimatedArrival('Arrived')
+          } else if (finalTerminal) {
+            const osrmMinutes = await fetchOSRMTravelTime(
+              [finalLat!, finalLng!],
+              finalTerminal.coordinates
+            )
+            if (osrmMinutes !== null) {
+              setEstimatedArrival(`${osrmMinutes} min`)
+            } else {
+              // Straight-line fallback: distance / avg speed (40 km/h)
+              const dLat = finalLat! - finalTerminal.coordinates[0]
+              const dLng = finalLng! - finalTerminal.coordinates[1]
+              const distKm = Math.sqrt(dLat * dLat + dLng * dLng) * 111
+              const mins = Math.max(1, Math.round((distKm / 40) * 60))
+              setEstimatedArrival(`~${mins} min`)
+            }
+          }
 
         } else {
           // No GPS fix available — trip is active but awaiting first location ping
