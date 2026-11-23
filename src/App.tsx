@@ -213,6 +213,8 @@ function App() {
   const [nearbyStopIndex, setNearbyStopIndex] = useState<number | null>(null)
   const [busLocationName, setBusLocationName] = useState<string>('Bus Location')
   const [gpsStatus, setGpsStatus] = useState<'connecting' | 'active' | 'error'>('connecting')
+  const [routeStatus, setRouteStatus] = useState<'active' | 'inactive'>('inactive')
+  const [activeBusId, setActiveBusId] = useState<string | null>(null)
   const [lastGpsUpdate, setLastGpsUpdate] = useState<string | null>(null)
   const [occupancyData, setOccupancyData] = useState<{ current: number; capacity: number; percentage: number } | null>(null)
   const [estimatedArrival, setEstimatedArrival] = useState<string>('Calculating...')
@@ -572,10 +574,18 @@ function App() {
           .order('started_at', { ascending: false })
           .maybeSingle() as any)
 
-        // If no active trip, set status to error instead of connecting
-        if (!activeTrip && !hasActiveGpsRef.current) {
+        // Update route status and bus ID based on active trip
+        if (activeTrip) {
+          setRouteStatus('active')
+          setActiveBusId(activeTrip.bus_id || null)
+        } else {
+          setRouteStatus('inactive')
+          setActiveBusId(null)
           setGpsStatus('error')
+          setBusLocation(null)
+          setBusCoordinates(null)
           setEstimatedArrival('No active trip')
+          setBusLocationName('No active trip')
           return
         }
 
@@ -615,9 +625,9 @@ function App() {
         // Priority 1: Real GPS row matching active trip
         // Priority 2: Direct current_lat/lng from active trip record (uploaded by driver phone)
         // Priority 3: Any global real driver phone/satellite GPS fix
-        // Priority 4: Terminal fallback if bus has not started or is stationary
-        let finalLat: number
-        let finalLng: number
+        // Priority 4: No GPS available — show waiting state, do NOT fake terminal position
+        let finalLat: number | null = null
+        let finalLng: number | null = null
         let locationSource: string
         let updatedAt: string | null = null
 
@@ -642,64 +652,74 @@ function App() {
           locationSource = latestRealGps.source
           updatedAt = latestRealGps.recorded_at
         } else {
-          // Default Manolo Fortich Bus Terminal
-          finalLat = 8.366264
-          finalLng = 124.865749
-          locationSource = 'terminal_default'
+          // No real GPS fix available — don't fake position
+          locationSource = 'none'
           updatedAt = null
         }
 
-        // Update bus state coordinates with finalLat and finalLng
-        setBusLocation([finalLat, finalLng])
+        // Update bus state coordinates — only if we have a real GPS fix
+        if (finalLat !== null && finalLng !== null) {
+          setBusLocation([finalLat, finalLng])
+          setBusCoordinates([finalLat, finalLng])
+        } else {
+          setBusLocation(null)
+          setBusCoordinates(null)
+        }
         setGpsSource(locationSource)
         setLastUpdated(updatedAt)
-
-        setBusCoordinates([finalLat, finalLng])
         setGpsStatus('active')
         hasActiveGpsRef.current = true
         const recordedAt = updatedAt || new Date().toISOString()
         setLastGpsUpdate(recordedAt)
-        lastKnownGpsRef.current = { lat: finalLat, lng: finalLng, recorded_at: recordedAt }
 
-        // Only log if GPS data actually changed
-        const prevGps = lastKnownGpsRef.current
-        if (!prevGps || prevGps.lat !== finalLat || prevGps.lng !== finalLng) {
-          console.log('Bus GPS resolved:', { finalLat, finalLng, locationSource, updatedAt })
-        }
+        if (finalLat !== null && finalLng !== null) {
+          lastKnownGpsRef.current = { lat: finalLat, lng: finalLng, recorded_at: recordedAt }
 
-        // Check if near any stop
-        let nearestIndex = null
-        let minDistance = Infinity
-
-        busStops.forEach((stop, index) => {
-          const distance = Math.sqrt(
-            Math.pow(finalLat - stop.coordinates[0], 2) + 
-            Math.pow(finalLng - stop.coordinates[1], 2)
-          )
-
-          // Consider "near" if within 0.01 degrees (approximately 1km)
-          if (distance < 0.01 && distance < minDistance) {
-            minDistance = distance
-            nearestIndex = index
+          // Only log if GPS data actually changed
+          const prevGps = lastKnownGpsRef.current
+          if (!prevGps || prevGps.lat !== finalLat || prevGps.lng !== finalLng) {
+            console.log('Bus GPS resolved:', { finalLat, finalLng, locationSource, updatedAt })
           }
-        })
 
-        setNearbyStopIndex(nearestIndex)
-        
-        // Final terminal is always the last stop — independent of fare calculator selection
-        const finalTerminal = busStops[busStops.length - 1]
-        const isAtFinalTerminal = nearestIndex === busStops.length - 1
-        
-        // Set bus location name
-        if (nearestIndex !== null) {
-          setBusLocationName(busStops[nearestIndex]?.location || 'Bus Location')
+          // Check if near any stop
+          let nearestIndex = null
+          let minDistance = Infinity
+
+          busStops.forEach((stop, index) => {
+            const distance = Math.sqrt(
+              Math.pow(finalLat! - stop.coordinates[0], 2) +
+              Math.pow(finalLng! - stop.coordinates[1], 2)
+            )
+
+            // Consider "near" if within 0.01 degrees (approximately 1km)
+            if (distance < 0.01 && distance < minDistance) {
+              minDistance = distance
+              nearestIndex = index
+            }
+          })
+
+          setNearbyStopIndex(nearestIndex)
+
+          // Set bus location name
+          if (nearestIndex !== null) {
+            setBusLocationName(busStops[nearestIndex]?.location || 'Bus Location')
+          } else {
+            setBusLocationName('En route')
+          }
+
+          // Final terminal is always the last stop — independent of fare calculator selection
+          const finalTerminal = busStops[busStops.length - 1]
+          const isAtFinalTerminal = nearestIndex === busStops.length - 1
+
+          // Selected stop ETA: not yet implemented (fare matrix doesn't map to GPS stops)
+          // setEstimatedArrivalToSelectedStop(...) — future work
+
         } else {
-          setBusLocationName('En route')
+          // No GPS fix available — trip is active but awaiting first location ping
+          setNearbyStopIndex(null)
+          setBusLocationName('Waiting for GPS...')
+          setEstimatedArrival('Waiting for GPS...')
         }
-
-        // Selected stop from fare calculator
-        // GPS tracking removed - fare calculator now uses fare matrix locations
-        // ETA to selected stop is no longer calculated
       } catch (err) {
         console.error('Error fetching live bus GPS:', err)
       }
@@ -956,7 +976,7 @@ function App() {
                             : 'Route information unavailable'
                           }
                         </p>
-                        <p className="text-mist/50 text-xs">Route Status: <span className="text-go">● Active</span></p>
+                        <p className="text-mist/50 text-xs">Route Status: <span className={routeStatus === 'active' ? 'text-go' : 'text-red-400'}>{routeStatus === 'active' ? '● Active' : '● Inactive'}</span></p>
                       </div>
                     </div>
                     <div className="text-right">
@@ -970,12 +990,12 @@ function App() {
                       <p className="text-xs text-mist/50 mb-1">Current Location</p>
                       <p className="text-mist font-medium text-sm">
                         {gpsStatus === 'connecting' ? 'Connecting to GPS...' :
-                         gpsStatus === 'error' ? 'GPS unavailable' :
-                         nearbyStopIndex !== null 
+                         gpsStatus === 'error' ? 'No active trip' :
+                         nearbyStopIndex !== null
                           ? `Approaching ${busStops[nearbyStopIndex]?.location || 'next stop'}`
-                          : (busCoordinates || busLocation) 
+                          : (busCoordinates || busLocation)
                             ? 'En route'
-                            : 'Waiting for GPS data...'}
+                            : 'Waiting for GPS...'}
                       </p>
                     </div>
                     <div>
@@ -995,7 +1015,7 @@ function App() {
                   </div>
 
                   <div className="mt-4 pt-4 border-t border-dashed border-white/10 flex items-center justify-between text-xs font-mono text-mist/50">
-                    <span>Bus: BUS-001</span>
+                    <span>Bus: {activeBusId || '—'}</span>
                     <span className="flex items-center gap-1.5">
                       <span className={`w-1.5 h-1.5 rounded-full ${
                         gpsStatus === 'active' ? 'bg-go pulse-dot' : 
