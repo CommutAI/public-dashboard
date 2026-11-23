@@ -567,27 +567,35 @@ function App() {
         }
 
         // 1. Fetch active trip coordinates (Driver app updates current_lat & current_lng live)
-        const { data: activeTrip } = await (supabase
+        const { data: activeTrip, error: tripError } = await (supabase
           .from('trips')
-          .select('id, bus_id, current_lat, current_lng, gps_updated_at, status, buses(plate_number, bus_number, name)')
+          .select('id, bus_id, current_lat, current_lng, gps_updated_at, status')
           .eq('status', 'in_progress')
           .order('started_at', { ascending: false })
           .maybeSingle() as any)
 
-        // Resolve a human-readable bus label (plate, name, or number — never raw UUID)
-        const resolveBusLabel = (trip: any): string | null => {
-          if (!trip) return null
-          const b = trip.buses
-          if (b?.plate_number) return b.plate_number
-          if (b?.bus_number) return `Bus ${b.bus_number}`
-          if (b?.name) return b.name
-          return null
+        if (tripError) {
+          console.error('Error fetching active trip:', tripError)
         }
 
         // Update route status and bus ID based on active trip
         if (activeTrip) {
           setRouteStatus('active')
-          setActiveBusId(resolveBusLabel(activeTrip))
+
+          // Fetch human-readable bus label separately — never show raw UUID
+          if (activeTrip.bus_id) {
+            const { data: busData } = await supabase
+              .from('buses')
+              .select('plate_number, bus_number, name')
+              .eq('id', activeTrip.bus_id)
+              .maybeSingle() as any
+            if (busData?.plate_number) setActiveBusId(busData.plate_number)
+            else if (busData?.bus_number) setActiveBusId(`Bus ${busData.bus_number}`)
+            else if (busData?.name) setActiveBusId(busData.name)
+            else setActiveBusId(null) // unknown bus — show nothing
+          } else {
+            setActiveBusId(null)
+          }
         } else {
           setRouteStatus('inactive')
           setActiveBusId(null)
