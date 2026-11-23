@@ -217,7 +217,7 @@ function App() {
   const [activeBusId, setActiveBusId] = useState<string | null>(null)
   const [lastGpsUpdate, setLastGpsUpdate] = useState<string | null>(null)
   const [occupancyData, setOccupancyData] = useState<{ current: number; capacity: number; percentage: number } | null>(null)
-  const [estimatedArrival, setEstimatedArrival] = useState<string>('Calculating...')
+  const [estimatedArrival, setEstimatedArrival] = useState<string>('Connecting...')
   const [tripSchedules, setTripSchedules] = useState<any[]>([
     {
       id: 1,
@@ -559,7 +559,12 @@ function App() {
     const fetchBusGPS = async () => {
       try {
         const supabase = getSupabaseClient()
-        if (!supabase) return
+        if (!supabase) {
+          setGpsStatus('error')
+          setEstimatedArrival('No active trip')
+          setRouteStatus('inactive')
+          return
+        }
 
         if (!hasActiveGpsRef.current) {
           setGpsStatus('connecting')
@@ -740,6 +745,12 @@ function App() {
         }
       } catch (err) {
         console.error('Error fetching live bus GPS:', err)
+        // Always resolve out of "Connecting..." on any error
+        setGpsStatus('error')
+        setRouteStatus('inactive')
+        setEstimatedArrival('No active trip')
+        setBusLocation(null)
+        setBusCoordinates(null)
       }
     }
 
