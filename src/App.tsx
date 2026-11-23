@@ -569,15 +569,25 @@ function App() {
         // 1. Fetch active trip coordinates (Driver app updates current_lat & current_lng live)
         const { data: activeTrip } = await (supabase
           .from('trips')
-          .select('id, bus_id, current_lat, current_lng, gps_updated_at, status')
+          .select('id, bus_id, current_lat, current_lng, gps_updated_at, status, buses(plate_number, bus_number, name)')
           .eq('status', 'in_progress')
           .order('started_at', { ascending: false })
           .maybeSingle() as any)
 
+        // Resolve a human-readable bus label (plate, name, or number — never raw UUID)
+        const resolveBusLabel = (trip: any): string | null => {
+          if (!trip) return null
+          const b = trip.buses
+          if (b?.plate_number) return b.plate_number
+          if (b?.bus_number) return `Bus ${b.bus_number}`
+          if (b?.name) return b.name
+          return null
+        }
+
         // Update route status and bus ID based on active trip
         if (activeTrip) {
           setRouteStatus('active')
-          setActiveBusId(activeTrip.bus_id || null)
+          setActiveBusId(resolveBusLabel(activeTrip))
         } else {
           setRouteStatus('inactive')
           setActiveBusId(null)
@@ -1015,7 +1025,7 @@ function App() {
                   </div>
 
                   <div className="mt-4 pt-4 border-t border-dashed border-white/10 flex items-center justify-between text-xs font-mono text-mist/50">
-                    <span>Bus: {activeBusId || '—'}</span>
+                    {activeBusId && <span>Bus: {activeBusId}</span>}
                     <span className="flex items-center gap-1.5">
                       <span className={`w-1.5 h-1.5 rounded-full ${
                         gpsStatus === 'active' ? 'bg-go pulse-dot' : 
