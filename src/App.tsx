@@ -1026,7 +1026,7 @@ function App() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs text-mist/50 mb-1">Next Arrival</p>
+                      <p className="text-xs text-mist/50 mb-1">ETA</p>
                       <div className="flap-board flap-sm text-amber" aria-live="polite">{estimatedArrival}</div>
                     </div>
                   </div>
